@@ -205,6 +205,18 @@ class GammaAPIClient:
         
         if result:
             self._market_cache[cache_key] = result
+            
+            # Update in-memory mappings
+            if condition_id:
+                self._market_names[condition_id] = result.get("question", "Unknown Market")
+                self._market_slugs[condition_id] = result.get("slug", "")
+                
+                tags = result.get("tags", [])
+                if tags:
+                    self._market_categories[condition_id] = self._categorize_market(tags)
+                else:
+                    self._market_categories[condition_id] = "Other"
+
             return result
         
         return None
