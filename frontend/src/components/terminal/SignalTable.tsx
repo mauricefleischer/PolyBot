@@ -30,7 +30,15 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
             // Column 1: RANK & CONSENSUS
             {
                 id: 'consensus',
-                header: 'Consensus',
+                header: ({ column }) => (
+                    <button
+                        className="flex items-center gap-1 hover:text-slate-900"
+                        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                    >
+                        Consensus
+                        <ArrowUpDown className="h-3 w-3" />
+                    </button>
+                ),
                 accessorKey: 'wallet_count',
                 cell: ({ row }) => {
                     const walletCount = row.original.wallet_count;

@@ -1,3 +1,5 @@
+import { useState, useMemo } from 'react';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { PortfolioPosition } from '../../types/api';
 import { cn, formatCurrency, formatPrice, formatPercent } from '../../lib/utils';
 
@@ -6,7 +8,72 @@ interface PortfolioMonitorProps {
     isLoading?: boolean;
 }
 
+type SortField = 'market_name' | 'size_usdc' | 'pnl_percent' | 'status' | 'whale_count';
+type SortDirection = 'asc' | 'desc';
+
 export function PortfolioMonitor({ positions, isLoading }: PortfolioMonitorProps) {
+    const [sortField, setSortField] = useState<SortField>('pnl_percent');
+    const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+    const handleSort = (field: SortField) => {
+        if (sortField === field) {
+            setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortField(field);
+            setSortDirection('desc');
+        }
+    };
+
+    const sortedPositions = useMemo(() => {
+        return [...positions].sort((a, b) => {
+            let comparison = 0;
+
+            switch (sortField) {
+                case 'market_name':
+                    comparison = a.market_name.localeCompare(b.market_name);
+                    break;
+                case 'size_usdc':
+                    comparison = a.size_usdc - b.size_usdc;
+                    break;
+                case 'pnl_percent':
+                    comparison = a.pnl_percent - b.pnl_percent;
+                    break;
+                case 'status':
+                    const statusOrder = { VALIDATED: 0, DIVERGENCE: 1, TRIM: 2 };
+                    comparison = (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0);
+                    break;
+                case 'whale_count':
+                    comparison = a.whale_count - b.whale_count;
+                    break;
+            }
+
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+    }, [positions, sortField, sortDirection]);
+
+    const SortHeader = ({ field, children }: { field: SortField; children: React.ReactNode }) => {
+        const isActive = sortField === field;
+        return (
+            <th
+                onClick={() => handleSort(field)}
+                className="cursor-pointer hover:bg-slate-100 select-none transition-colors"
+            >
+                <div className="flex items-center gap-1">
+                    {children}
+                    {isActive ? (
+                        sortDirection === 'desc' ? (
+                            <ArrowDown className="w-3 h-3 text-blue-600" />
+                        ) : (
+                            <ArrowUp className="w-3 h-3 text-blue-600" />
+                        )
+                    ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                    )}
+                </div>
+            </th>
+        );
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-48 text-slate-500">
@@ -28,17 +95,17 @@ export function PortfolioMonitor({ positions, isLoading }: PortfolioMonitorProps
             <table className="terminal-table">
                 <thead>
                     <tr>
-                        <th>Market</th>
+                        <SortHeader field="market_name">Market</SortHeader>
                         <th>Position</th>
-                        <th>Size</th>
+                        <SortHeader field="size_usdc">Size</SortHeader>
                         <th>Entry / Now</th>
-                        <th>PnL</th>
-                        <th>Status</th>
+                        <SortHeader field="pnl_percent">PnL</SortHeader>
+                        <SortHeader field="status">Status</SortHeader>
                         <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {positions.map((position, index) => (
+                    {sortedPositions.map((position, index) => (
                         <PositionRow key={`${position.market_id}-${index}`} position={position} />
                     ))}
                 </tbody>
