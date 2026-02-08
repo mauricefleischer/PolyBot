@@ -19,6 +19,7 @@ export interface Signal {
     group_key: string;
     market_id: string;
     market_name: string;
+    market_slug?: string;
     outcome_label: string;
     direction: 'YES' | 'NO';
     category: string;

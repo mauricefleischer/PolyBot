@@ -28,11 +28,14 @@ function TerminalApp() {
   const { settings: riskSettings, updateSettings } = useSettings();
   const userWallet = riskSettings.connectedWallet || null;
 
-  // Real-time Balance
-  const { data: balance = 0 } = useBalance(userWallet);
+  // Fetch real USDC balance
+  const { data: realBalance = 0 } = useBalance(userWallet);
+
+  // Use real balance if connected, otherwise default to 1000 for demo sizing
+  const sizingBalance = userWallet ? realBalance : 1000;
 
   // Fetch data with risk settings
-  const { data: signals = [], isLoading: signalsLoading, refetch: refetchSignals } = useSignals(balance, riskSettings);
+  const { data: signals = [], isLoading: signalsLoading, refetch: refetchSignals } = useSignals(sizingBalance, riskSettings);
   const { data: walletsData } = useWallets();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio(userWallet);
 
@@ -62,7 +65,7 @@ function TerminalApp() {
   return (
     <div className="min-h-screen bg-white">
       <Header
-        usdcBalance={balance}
+        usdcBalance={sizingBalance}
         walletCount={walletCount}
         signalCount={signalCount}
         onRefresh={handleRefresh}

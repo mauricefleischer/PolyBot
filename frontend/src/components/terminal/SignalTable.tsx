@@ -185,15 +185,24 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
                 id: 'execute',
                 header: 'Execute',
                 cell: ({ row }) => {
-                    const { recommended_size, alpha_score, kelly_breakdown } = row.original;
+                    const { recommended_size, alpha_score, kelly_breakdown, market_slug, market_id } = row.original;
                     const isWarning = alpha_score < 40;
+
+                    const handleBetClick = () => {
+                        const baseUrl = 'https://polymarket.com';
+                        const url = market_slug
+                            ? `${baseUrl}/event/${market_slug}`
+                            : `${baseUrl}/market/${market_id}`;
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                    };
 
                     return (
                         <Tooltip content={<KellyTooltipContent size={recommended_size} breakdown={kelly_breakdown || {}} />}>
                             <button
+                                onClick={handleBetClick}
                                 className={cn(
                                     isWarning ? 'btn-warning' : 'btn-primary',
-                                    'whitespace-nowrap'
+                                    'whitespace-nowrap hover:brightness-110 active:scale-95 transition-all'
                                 )}
                             >
                                 BET {formatCurrency(recommended_size)}

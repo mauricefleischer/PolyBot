@@ -155,24 +155,45 @@ function PositionRow({ position }: PositionRowProps) {
         switch (status) {
             case 'VALIDATED':
                 return (
-                    <Tooltip content={STATUS_INFO.VALIDATED.description}>
-                        <span className="badge badge-validated cursor-help">
+                    <Tooltip content={
+                        <div className="space-y-1">
+                            <div className="font-semibold text-emerald-400">{STATUS_INFO.VALIDATED.title}</div>
+                            <div className="text-slate-300 text-[10px] leading-tight max-w-[180px]">
+                                {STATUS_INFO.VALIDATED.description}
+                            </div>
+                        </div>
+                    }>
+                        <span className="cursor-help badge badge-validated">
                             VALIDATED
                         </span>
                     </Tooltip>
                 );
             case 'DIVERGENCE':
                 return (
-                    <Tooltip content={STATUS_INFO.DIVERGENCE.description}>
-                        <span className="badge badge-divergence cursor-help">
+                    <Tooltip content={
+                        <div className="space-y-1">
+                            <div className="font-semibold text-rose-400">{STATUS_INFO.DIVERGENCE.title}</div>
+                            <div className="text-slate-300 text-[10px] leading-tight max-w-[180px]">
+                                {STATUS_INFO.DIVERGENCE.description}
+                            </div>
+                        </div>
+                    }>
+                        <span className="cursor-help badge badge-divergence">
                             DIVERGENCE
                         </span>
                     </Tooltip>
                 );
             case 'TRIM':
                 return (
-                    <Tooltip content={STATUS_INFO.TRIM.description}>
-                        <span className="badge badge-trim cursor-help">
+                    <Tooltip content={
+                        <div className="space-y-1">
+                            <div className="font-semibold text-amber-400">{STATUS_INFO.TRIM.title}</div>
+                            <div className="text-slate-300 text-[10px] leading-tight max-w-[180px]">
+                                {STATUS_INFO.TRIM.description}
+                            </div>
+                        </div>
+                    }>
+                        <span className="cursor-help badge badge-trim">
                             TRIM
                         </span>
                     </Tooltip>

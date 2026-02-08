@@ -133,6 +133,8 @@ class ConsensusEngine:
                 
                 # Get market metadata
                 market_name = pos.get("title", pos.get("question", "Unknown Market"))
+                market_slug = pos.get("slug", gamma_client.get_market_slug(market_id))
+                
                 if not market_name:
                     market_name = gamma_client.get_market_name(market_id)
                 
@@ -145,6 +147,7 @@ class ConsensusEngine:
                 market_key = f"{market_id}_{outcome}"
                 mp = market_positions[market_key]
                 mp["market_name"] = market_name
+                mp["market_slug"] = market_slug
                 mp["outcome_label"] = outcome_label
                 mp["category"] = category
                 
@@ -185,6 +188,7 @@ class ConsensusEngine:
                         size_usdc=yes_size * mp["yes_entry"],  # Size in USDC
                         category=mp["category"],
                         market_name=mp["market_name"],
+                        market_slug=mp.get("market_slug", ""),
                     ))
                 
                 if no_size > 0:
@@ -199,12 +203,104 @@ class ConsensusEngine:
                         size_usdc=no_size * mp["no_entry"],
                         category=mp["category"],
                         market_name=mp["market_name"],
+                        market_slug=mp.get("market_slug", ""),
                     ))
-        
+
         except Exception as e:
             print(f"Error fetching positions for {wallet_address}: {e}")
         
         return raw_signals
+
+    # ... (skipping calculate_alpha_score methods) ...
+
+    async def get_ranked_signals(
+        self,
+        min_wallets: int = 1,
+        user_balance: Optional[float] = None,
+        kelly_multiplier: float = 0.25,
+        max_risk_cap: float = 0.05,
+        hide_lottery: bool = False,
+    ) -> List[SignalSchema]:
+        """
+        Get aggregated, ranked signals with Kelly sizing.
+        """
+        raw_signals = await self.aggregate_positions()
+        
+        # Group by Market + Outcome + Direction
+        grouped_signals: Dict[str, AggregatedSignal] = {}
+        
+        for sig in raw_signals:
+            key = f"{sig.market_id}_{sig.outcome_label}_{sig.direction}"
+            
+            if key not in grouped_signals:
+                grouped_signals[key] = AggregatedSignal(
+                    id=key,
+                    market_id=sig.market_id,
+                    market_name=sig.market_name,
+                    outcome_label=sig.outcome_label,
+                    direction=sig.direction,
+                    category=sig.category,
+                    market_slug=sig.market_slug,
+                )
+            
+            group = grouped_signals[key]
+            group.wallets.add(sig.wallet_address)
+            group.total_conviction += sig.size_usdc
+            group.current_price = sig.current_price  # Assess latest price
+            
+            # Weighted average entry
+            current_total_value = (group.avg_entry_price * (group.total_conviction - sig.size_usdc)) + (sig.entry_price * sig.size_usdc)
+            if group.total_conviction > 0:
+                group.avg_entry_price = current_total_value / group.total_conviction
+            else:
+                group.avg_entry_price = sig.entry_price
+
+        # ... (rest of filtering) ...
+
+        results = []
+        for group in grouped_signals.values():
+            if len(group.wallets) < min_wallets:
+                continue
+                
+            alpha_score, text_breakdown = self.calculate_alpha_score(group)
+            
+            if hide_lottery and alpha_score < 30:
+                continue
+            
+            recommended_size = 0.0
+            kelly_breakdown = {}
+            
+            if user_balance:
+                recommended_size, kelly_breakdown = self.calculate_kelly_size(
+                    group.current_price,
+                    alpha_score,
+                    user_balance,
+                    multiplier=kelly_multiplier,
+                    max_risk_cap=max_risk_cap
+                )
+            
+            results.append(SignalSchema(
+                group_key=group.id,
+                market_id=group.market_id,
+                market_name=group.market_name,
+                market_slug=group.market_slug,
+                outcome_label=group.outcome_label,
+                direction=group.direction,
+                category=group.category,
+                wallet_count=len(group.wallets),
+                total_conviction=group.total_conviction,
+                avg_entry_price=group.avg_entry_price,
+                current_price=group.current_price,
+                alpha_score=alpha_score,
+                alpha_breakdown=text_breakdown,
+                recommended_size=recommended_size,
+                kelly_breakdown=kelly_breakdown,
+            ))
+        
+        # Sort by Wallet Count DESC, then Alpha Score DESC
+        results.sort(key=lambda x: (x.wallet_count, x.alpha_score, x.total_conviction), reverse=True)
+        
+        return results
     
     def calculate_alpha_score(self, signal: AggregatedSignal) -> tuple[int, List[str]]:
         """

@@ -33,6 +33,7 @@ class GammaAPIClient:
         # In-memory market name mapping
         self._market_names: dict[str, str] = {}
         self._market_categories: dict[str, str] = {}
+        self._market_slugs: dict[str, str] = {}
     
     async def _request(
         self, 
@@ -85,6 +86,7 @@ class GammaAPIClient:
                 condition_id = market.get("conditionId", market.get("condition_id", ""))
                 if condition_id:
                     self._market_names[condition_id] = market.get("question", "Unknown Market")
+                    self._market_slugs[condition_id] = market.get("slug", "")
                     # Infer category from tags or default
                     tags = market.get("tags", [])
                     if tags:
@@ -214,6 +216,10 @@ class GammaAPIClient:
     def get_market_category(self, condition_id: str) -> str:
         """Get cached market category."""
         return self._market_categories.get(condition_id, "Other")
+
+    def get_market_slug(self, condition_id: str) -> str:
+        """Get cached market slug."""
+        return self._market_slugs.get(condition_id, "")
     
     async def initialize_market_cache(self):
         """Pre-load market cache on startup."""

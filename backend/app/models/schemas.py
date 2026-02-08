@@ -25,6 +25,7 @@ class RawSignal:
     category: str  # "Sports", "Politics", "Finance", "Entertainment"
     market_name: str = ""
     outcome_index: int = 0
+    market_slug: str = ""
 
 
 class SignalSchema(BaseModel):
@@ -38,6 +39,7 @@ class SignalSchema(BaseModel):
     group_key: str = Field(description="Unique key: market_id_outcome_direction")
     market_id: str = Field(description="Polymarket market/condition ID")
     market_name: str = Field(description="Human-readable market name")
+    market_slug: str = Field(default="", description="Polymarket event slug for linking")
     outcome_label: str = Field(description="Outcome being bet on")
     direction: str = Field(description="YES or NO")
     category: str = Field(description="Market category")
