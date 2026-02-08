@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
 import { Header } from './components/Header';
 import { SignalTable, PortfolioMonitor, SettingsTab } from './components/terminal';
-import { useSignals, usePortfolio, useWallets, DEFAULT_RISK_SETTINGS } from './hooks/useSignals';
+import { useSignals, usePortfolio, useWallets } from './hooks/useSignals';
+import { useSettings } from './hooks/useSettings';
 import type { RiskSettings } from './types/api';
 import './index.css';
 
@@ -19,30 +20,13 @@ const queryClient = new QueryClient({
 
 type TabType = 'scanner' | 'portfolio' | 'settings';
 
-// Local storage key for risk settings
-const RISK_SETTINGS_KEY = 'consensus_terminal_risk_settings';
-
-function loadRiskSettings(): RiskSettings {
-  try {
-    const stored = localStorage.getItem(RISK_SETTINGS_KEY);
-    if (stored) {
-      return { ...DEFAULT_RISK_SETTINGS, ...JSON.parse(stored) };
-    }
-  } catch {
-    // ignore
-  }
-  return DEFAULT_RISK_SETTINGS;
-}
-
-function saveRiskSettings(settings: RiskSettings) {
-  localStorage.setItem(RISK_SETTINGS_KEY, JSON.stringify(settings));
-}
-
 function TerminalApp() {
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
   const [userBalance] = useState(1000); // Default user balance
-  const [userWallet, setUserWallet] = useState<string | null>(null);
-  const [riskSettings, setRiskSettings] = useState<RiskSettings>(loadRiskSettings);
+
+  // Server-synced settings
+  const { settings: riskSettings, updateSettings, isLoading: settingsLoading } = useSettings();
+  const userWallet = riskSettings.connectedWallet || null;
 
   // Fetch data with risk settings
   const { data: signals = [], isLoading: signalsLoading, refetch: refetchSignals } = useSignals(userBalance, riskSettings);
@@ -57,11 +41,11 @@ function TerminalApp() {
   };
 
   const handleConnectWallet = (address: string) => {
-    setUserWallet(address);
+    updateSettings({ connectedWallet: address });
   };
 
   const handleDisconnectWallet = () => {
-    setUserWallet(null);
+    updateSettings({ connectedWallet: undefined });
   };
 
   const handleConnectFromPortfolio = () => {
@@ -69,8 +53,7 @@ function TerminalApp() {
   };
 
   const handleRiskSettingsChange = (newSettings: RiskSettings) => {
-    setRiskSettings(newSettings);
-    saveRiskSettings(newSettings);
+    updateSettings(newSettings);
   };
 
   return (
@@ -89,8 +72,8 @@ function TerminalApp() {
           <button
             onClick={() => setActiveTab('scanner')}
             className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'scanner'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >
             Alpha Scanner
@@ -98,8 +81,8 @@ function TerminalApp() {
           <button
             onClick={() => setActiveTab('portfolio')}
             className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'portfolio'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >
             Portfolio Monitor
@@ -107,8 +90,8 @@ function TerminalApp() {
           <button
             onClick={() => setActiveTab('settings')}
             className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'settings'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
           >
             <Settings className="w-4 h-4" />

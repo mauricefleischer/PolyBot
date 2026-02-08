@@ -130,14 +130,19 @@ async def configure_wallets(request: WalletConfigRequest):
     """
     Add or remove wallets from tracking.
     
-    Wallets are persisted to wallets.json.
+    Wallets are persisted to SQLite database.
     """
+    from app.services.database import db_service
+    
     try:
         if request.action == WalletAction.ADD:
+            # Add to both legacy engine and database
             success = consensus_engine.add_wallet(request.address)
+            db_service.add_wallet(request.address, request.address[:10] + "...")
             message = f"Wallet {request.address} added" if success else "Wallet already tracked"
         else:
             success = consensus_engine.remove_wallet(request.address)
+            db_service.remove_wallet(request.address)
             message = f"Wallet {request.address} removed" if success else "Wallet not found"
         
         return WalletConfigResponse(
@@ -151,11 +156,85 @@ async def configure_wallets(request: WalletConfigRequest):
 
 @app.get("/api/v1/config/wallets")
 async def get_wallets():
-    """Get list of currently tracked wallets."""
+    """Get list of currently tracked wallets with names."""
+    from app.services.database import db_service
+    
+    wallet_names = db_service.get_wallet_names()
+    wallets = consensus_engine.get_wallets()
+    
     return {
-        "wallets": consensus_engine.get_wallets(),
-        "count": len(consensus_engine.get_wallets()),
+        "wallets": wallets,
+        "names": wallet_names,
+        "count": len(wallets),
     }
+
+
+# ============================================================================
+# Settings Endpoints
+# ============================================================================
+
+class SettingsRequest(BaseModel):
+    """Settings update request."""
+    kelly_multiplier: Optional[float] = None
+    max_risk_cap: Optional[float] = None
+    min_wallets: Optional[int] = None
+    hide_lottery: Optional[bool] = None
+    connected_wallet: Optional[str] = None
+
+
+class SettingsResponse(BaseModel):
+    """Settings response."""
+    kelly_multiplier: float
+    max_risk_cap: float
+    min_wallets: int
+    hide_lottery: bool
+    connected_wallet: Optional[str]
+
+
+@app.get("/api/v1/settings", response_model=SettingsResponse)
+async def get_settings():
+    """Get user settings from database."""
+    from app.services.database import db_service
+    
+    settings = db_service.get_settings()
+    return SettingsResponse(
+        kelly_multiplier=settings.kelly_multiplier,
+        max_risk_cap=settings.max_risk_cap,
+        min_wallets=settings.min_wallets,
+        hide_lottery=settings.hide_lottery,
+        connected_wallet=settings.connected_wallet,
+    )
+
+
+@app.put("/api/v1/settings", response_model=SettingsResponse)
+async def update_settings(request: SettingsRequest):
+    """Update user settings in database."""
+    from app.services.database import db_service
+    
+    updated = db_service.update_settings(
+        kelly_multiplier=request.kelly_multiplier,
+        max_risk_cap=request.max_risk_cap,
+        min_wallets=request.min_wallets,
+        hide_lottery=request.hide_lottery,
+        connected_wallet=request.connected_wallet,
+    )
+    
+    return SettingsResponse(
+        kelly_multiplier=updated.kelly_multiplier,
+        max_risk_cap=updated.max_risk_cap,
+        min_wallets=updated.min_wallets,
+        hide_lottery=updated.hide_lottery,
+        connected_wallet=updated.connected_wallet,
+    )
+
+
+@app.put("/api/v1/config/wallet-name")
+async def set_wallet_name(address: str, name: str):
+    """Set a display name for a wallet address."""
+    from app.services.database import db_service
+    
+    db_service.set_wallet_name(address, name)
+    return {"success": True, "address": address, "name": name}
 
 
 @app.get("/api/v1/health")
@@ -165,4 +244,5 @@ async def health_check():
         "status": "healthy",
         "tracked_wallets": len(consensus_engine.get_wallets()),
         "cache_status": "active",
+        "database": "sqlite",
     }

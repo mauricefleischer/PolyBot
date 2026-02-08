@@ -37,6 +37,7 @@ export interface RiskSettings {
     maxRiskCap: number;
     minWallets: number;
     hideLottery: boolean;
+    connectedWallet?: string;
 }
 
 export interface PortfolioPosition {
