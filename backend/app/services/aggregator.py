@@ -162,29 +162,6 @@ class ConsensusEngine:
                     mp["no_token_id"] = token_id
                     mp["no_cur_price"] = current_price_raw
             
-            # --- Metadata Enrichment Step ---
-            # Identify markets with missing slugs and fetch them
-            missing_metadata_ids = set()
-            for market_key, mp in market_positions.items():
-                market_id = market_key.rsplit("_", 1)[0]
-                # Check if slug is missing in both MP and Cache
-                if not mp.get("market_slug") and not gamma_client.get_market_slug(market_id):
-                    missing_metadata_ids.add(market_id)
-            
-            if missing_metadata_ids:
-                print(f"Fetching metadata for {len(missing_metadata_ids)} markets...")
-                # Rate limit concurrent fetches if needed, but gather is fine for small batches
-                # GammaClient handles rate limiting internally with semaphore
-                await asyncio.gather(*[gamma_client.fetch_market_by_condition(mid) for mid in missing_metadata_ids])
-                
-                # Update MPs with newly fetched slugs
-                for market_key, mp in market_positions.items():
-                    market_id = market_key.rsplit("_", 1)[0]
-                    if not mp.get("market_slug"):
-                        mp["market_slug"] = gamma_client.get_market_slug(market_id)
-                        if not mp.get("market_name") or mp.get("market_name") == "Unknown Market":
-                            mp["market_name"] = gamma_client.get_market_name(market_id)
-
             # Apply Universal Netting and create RawSignals
             for market_key, mp in market_positions.items():
                 market_id = market_key.rsplit("_", 1)[0]

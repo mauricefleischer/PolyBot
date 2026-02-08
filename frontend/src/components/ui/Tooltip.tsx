@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 interface TooltipProps {
@@ -67,7 +67,7 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
 
     const tooltipElement = isVisible ? (
         <div
-            className={`fixed z-[9999] ${getTransformClass()} pointer-events-none`}
+            className={`absolute z-[9999] ${getTransformClass()} pointer-events-none`}
             style={{ top: coords.top, left: coords.left }}
         >
             <div className="bg-slate-900 text-white text-xs rounded-lg px-3 py-2 shadow-xl border border-slate-700 max-w-xs">
