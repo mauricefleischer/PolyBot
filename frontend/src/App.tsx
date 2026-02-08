@@ -51,7 +51,7 @@ function TerminalApp() {
   };
 
   const handleDisconnectWallet = () => {
-    updateSettings({ connectedWallet: undefined });
+    updateSettings({ connectedWallet: '' });
   };
 
   const handleConnectFromPortfolio = () => {
@@ -65,7 +65,7 @@ function TerminalApp() {
   return (
     <div className="min-h-screen bg-white">
       <Header
-        usdcBalance={sizingBalance}
+        usdcBalance={userWallet ? realBalance : null}
         walletCount={walletCount}
         signalCount={signalCount}
         onRefresh={handleRefresh}
