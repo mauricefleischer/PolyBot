@@ -237,6 +237,30 @@ async def set_wallet_name(address: str, name: str):
     return {"success": True, "address": address, "name": name}
 
 
+@app.get("/api/v1/user/balance")
+async def get_user_balance(
+    wallet: str = Query(..., min_length=42, max_length=42, description="User wallet address"),
+):
+    """
+    Get USDC balance for a wallet on Polygon.
+    
+    Returns:
+    - usdc_balance: Available USDC (not in positions)
+    """
+    from app.services.chain_data import web3_client
+    
+    try:
+        balance = await web3_client.get_usdc_balance(wallet)
+        return {
+            "wallet": wallet,
+            "usdc_balance": balance,
+            "currency": "USDC",
+            "chain": "Polygon",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/v1/health")
 async def health_check():
     """Detailed health check."""

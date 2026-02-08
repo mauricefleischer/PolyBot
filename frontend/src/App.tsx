@@ -5,6 +5,7 @@ import { Header } from './components/Header';
 import { SignalTable, PortfolioMonitor, SettingsTab } from './components/terminal';
 import { useSignals, usePortfolio, useWallets } from './hooks/useSignals';
 import { useSettings } from './hooks/useSettings';
+import { useBalance } from './hooks/useBalance';
 import type { RiskSettings } from './types/api';
 import './index.css';
 
@@ -22,14 +23,16 @@ type TabType = 'scanner' | 'portfolio' | 'settings';
 
 function TerminalApp() {
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
-  const [userBalance] = useState(1000); // Default user balance
 
   // Server-synced settings
-  const { settings: riskSettings, updateSettings, isLoading: settingsLoading } = useSettings();
+  const { settings: riskSettings, updateSettings } = useSettings();
   const userWallet = riskSettings.connectedWallet || null;
 
+  // Real-time Balance
+  const { data: balance = 0 } = useBalance(userWallet);
+
   // Fetch data with risk settings
-  const { data: signals = [], isLoading: signalsLoading, refetch: refetchSignals } = useSignals(userBalance, riskSettings);
+  const { data: signals = [], isLoading: signalsLoading, refetch: refetchSignals } = useSignals(balance, riskSettings);
   const { data: walletsData } = useWallets();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio(userWallet);
 
@@ -59,7 +62,7 @@ function TerminalApp() {
   return (
     <div className="min-h-screen bg-white">
       <Header
-        usdcBalance={userBalance}
+        usdcBalance={balance}
         walletCount={walletCount}
         signalCount={signalCount}
         onRefresh={handleRefresh}

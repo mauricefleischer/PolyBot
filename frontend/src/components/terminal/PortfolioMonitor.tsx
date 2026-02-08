@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { PortfolioPosition } from '../../types/api';
+import { Tooltip } from '../ui/Tooltip';
 import { cn, formatCurrency, formatPrice, formatPercent } from '../../lib/utils';
 
 interface PortfolioMonitorProps {
@@ -10,6 +11,22 @@ interface PortfolioMonitorProps {
 
 type SortField = 'market_name' | 'size_usdc' | 'pnl_percent' | 'status' | 'whale_count';
 type SortDirection = 'asc' | 'desc';
+
+// Status explanations for tooltips
+const STATUS_INFO = {
+    VALIDATED: {
+        title: '✅ VALIDATED',
+        description: 'Your position aligns with whale consensus. Whales are holding the same position - this is a strong signal to hold.',
+    },
+    DIVERGENCE: {
+        title: '⚠️ DIVERGENCE',
+        description: 'Your position differs from whale consensus. Whales have exited or taken the opposite side. Consider selling.',
+    },
+    TRIM: {
+        title: '🔻 TRIM',
+        description: 'Your position is larger than optimal. Whales have reduced exposure. Consider reducing your position size.',
+    },
+};
 
 export function PortfolioMonitor({ positions, isLoading }: PortfolioMonitorProps) {
     const [sortField, setSortField] = useState<SortField>('pnl_percent');
@@ -138,21 +155,27 @@ function PositionRow({ position }: PositionRowProps) {
         switch (status) {
             case 'VALIDATED':
                 return (
-                    <span className="badge badge-validated">
-                        VALIDATED
-                    </span>
+                    <Tooltip content={STATUS_INFO.VALIDATED.description}>
+                        <span className="badge badge-validated cursor-help">
+                            VALIDATED
+                        </span>
+                    </Tooltip>
                 );
             case 'DIVERGENCE':
                 return (
-                    <span className="badge badge-divergence">
-                        DIVERGENCE
-                    </span>
+                    <Tooltip content={STATUS_INFO.DIVERGENCE.description}>
+                        <span className="badge badge-divergence cursor-help">
+                            DIVERGENCE
+                        </span>
+                    </Tooltip>
                 );
             case 'TRIM':
                 return (
-                    <span className="badge badge-trim">
-                        TRIM
-                    </span>
+                    <Tooltip content={STATUS_INFO.TRIM.description}>
+                        <span className="badge badge-trim cursor-help">
+                            TRIM
+                        </span>
+                    </Tooltip>
                 );
             default:
                 return null;
