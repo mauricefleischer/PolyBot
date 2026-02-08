@@ -1,0 +1,212 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+/* Global Styles - Financial Terminal Aesthetic */
+:root {
+  --font-mono: 'JetBrains Mono', 'Roboto Mono', ui-monospace, SFMono-Regular, monospace;
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: #ffffff;
+  color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular Numbers for Financial Data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Table Styles */
+.terminal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.terminal-table th {
+  background-color: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.terminal-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.terminal-table tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Badge Styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 0.125rem;
+  border-width: 1px;
+  border-style: solid;
+}
+
+.badge-long {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
+.badge-short {
+  background-color: #ffe4e6;
+  color: #9f1239;
+  border-color: #fda4af;
+}
+
+.badge-validated {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
+.badge-divergence {
+  background-color: #ffe4e6;
+  color: #9f1239;
+  border-color: #fda4af;
+}
+
+.badge-trim {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-color: #93c5fd;
+}
+
+.badge-lottery {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.badge-alpha {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #6ee7b7;
+}
+
+/* Heatmap Bar */
+.heatmap-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0.25rem;
+}
+
+.heatmap-high {
+  background-color: #059669;
+}
+
+.heatmap-medium {
+  background-color: #f59e0b;
+}
+
+/* Button Styles */
+.btn-primary {
+  background-color: #0f172a;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary:hover {
+  background-color: #1e293b;
+}
+
+.btn-warning {
+  background-color: #ffffff;
+  color: #b45309;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  border: 2px solid #f59e0b;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.btn-warning:hover {
+  background-color: #fffbeb;
+}
+
+.btn-danger {
+  background-color: #ffffff;
+  color: #be123c;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 0.25rem;
+  border: 2px solid #f43f5e;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+.btn-danger:hover {
+  background-color: #fff1f2;
+}
+
+/* Score Progress Bar */
+.score-bar {
+  position: absolute;
+  inset: 0;
+  opacity: 0.1;
+}
+
+/* Price Colors */
+.price-profit {
+  color: #047857;
+  font-weight: 600;
+}
+
+.price-loss {
+  color: #be123c;
+  font-weight: 600;
+}
+
+/* Card Styles */
+.stat-card {
+  background-color: #f1f5f9;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+}

@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Node
+node_modules/
+.npm
+.pnpm-store/
+
+# Build outputs
+frontend/dist/
+*.log
+
+# Cache
+.cache/
+*.cache
+
+# Wallets config (contains addresses)
+backend/wallets.json

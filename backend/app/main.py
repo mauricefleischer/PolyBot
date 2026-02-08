@@ -1,0 +1,168 @@
+"""
+FastAPI Entrypoint for the Consensus Terminal.
+Exposes API endpoints for signals, portfolio, and wallet management.
+"""
+from contextlib import asynccontextmanager
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+from app.models.schemas import (
+    SignalSchema,
+    PortfolioSchema,
+    WalletConfigRequest,
+    WalletAction,
+)
+from app.services.aggregator import consensus_engine
+from app.services.polymarket import gamma_client
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events."""
+    # Startup: Initialize market cache
+    print("Initializing market cache...")
+    await gamma_client.initialize_market_cache()
+    print("Market cache initialized.")
+    yield
+    # Shutdown
+    print("Shutting down...")
+
+
+app = FastAPI(
+    title="Consensus Terminal API",
+    description="High-performance whale consensus aggregator for Polymarket",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
+@app.get("/")
+async def root():
+    """Health check endpoint."""
+    return {
+        "status": "online",
+        "service": "Consensus Terminal",
+        "version": "1.0.0",
+    }
+
+
+@app.get("/api/v1/signals", response_model=list[SignalSchema])
+async def get_signals(
+    min_wallets: int = Query(default=1, ge=1, le=10, description="Minimum wallet consensus"),
+    user_balance: Optional[float] = Query(default=None, ge=0, description="User USDC balance for sizing"),
+    kelly_multiplier: float = Query(default=0.25, ge=0.1, le=1.0, description="Kelly fraction (0.1=Conservative, 0.25=Balanced, 0.5=Aggressive)"),
+    max_risk_cap: float = Query(default=0.05, ge=0.01, le=0.20, description="Maximum risk per trade (1%-20%)"),
+    hide_lottery: bool = Query(default=False, description="Hide signals with Alpha Score < 30"),
+):
+    """
+    Get ranked consensus signals from tracked whales.
+    
+    Returns signals sorted by:
+    1. Wallet Count (descending)
+    2. Alpha Score (descending)
+    3. Total Conviction (descending)
+    
+    Kelly Criterion sizing with configurable parameters.
+    """
+    try:
+        signals = await consensus_engine.get_ranked_signals(
+            min_wallets=min_wallets,
+            user_balance=user_balance,
+            kelly_multiplier=kelly_multiplier,
+            max_risk_cap=max_risk_cap,
+            hide_lottery=hide_lottery,
+        )
+        return signals
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/user/portfolio", response_model=PortfolioSchema)
+async def get_portfolio(
+    wallet: str = Query(..., min_length=42, max_length=42, description="User wallet address"),
+):
+    """
+    Get user's portfolio compared against whale consensus.
+    
+    Returns:
+    - Active positions with PnL
+    - Validation status (VALIDATED, DIVERGENCE, TRIM)
+    - USDC balance
+    """
+    try:
+        portfolio = await consensus_engine.get_user_portfolio(wallet)
+        return portfolio
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class WalletConfigResponse(BaseModel):
+    """Response for wallet configuration changes."""
+    success: bool
+    message: str
+    wallets: list[str]
+
+
+@app.post("/api/v1/config/wallets", response_model=WalletConfigResponse)
+async def configure_wallets(request: WalletConfigRequest):
+    """
+    Add or remove wallets from tracking.
+    
+    Wallets are persisted to wallets.json.
+    """
+    try:
+        if request.action == WalletAction.ADD:
+            success = consensus_engine.add_wallet(request.address)
+            message = f"Wallet {request.address} added" if success else "Wallet already tracked"
+        else:
+            success = consensus_engine.remove_wallet(request.address)
+            message = f"Wallet {request.address} removed" if success else "Wallet not found"
+        
+        return WalletConfigResponse(
+            success=success,
+            message=message,
+            wallets=consensus_engine.get_wallets(),
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/v1/config/wallets")
+async def get_wallets():
+    """Get list of currently tracked wallets."""
+    return {
+        "wallets": consensus_engine.get_wallets(),
+        "count": len(consensus_engine.get_wallets()),
+    }
+
+
+@app.get("/api/v1/health")
+async def health_check():
+    """Detailed health check."""
+    return {
+        "status": "healthy",
+        "tracked_wallets": len(consensus_engine.get_wallets()),
+        "cache_status": "active",
+    }
