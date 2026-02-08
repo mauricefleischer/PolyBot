@@ -86,7 +86,18 @@ class GammaAPIClient:
                 condition_id = market.get("conditionId", market.get("condition_id", ""))
                 if condition_id:
                     self._market_names[condition_id] = market.get("question", "Unknown Market")
-                    self._market_slugs[condition_id] = market.get("slug", "")
+                    
+                    # Extract correct slug for linking (Event Slug > Market Slug)
+                    events = market.get("events", [])
+                    if events and isinstance(events, list) and len(events) > 0:
+                        slug = events[0].get("slug")
+                        if not slug:
+                            slug = market.get("slug", "")
+                    else:
+                        slug = market.get("slug", "")
+                    
+                    self._market_slugs[condition_id] = slug
+                    
                     # Infer category from tags or default
                     tags = market.get("tags", [])
                     if tags:
