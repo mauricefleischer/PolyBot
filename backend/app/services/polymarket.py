@@ -237,6 +237,84 @@ class GammaAPIClient:
         await self.fetch_markets(limit=500, active=True)
         await self.fetch_markets(limit=100, active=True, closed=False)
 
+    # =========================================================================
+    # CLOB API – Price History (for Momentum Scoring)
+    # =========================================================================
+    
+    CLOB_BASE_URL = "https://clob.polymarket.com"
+    
+    async def fetch_price_history(self, token_id: str, interval: str = "1w") -> Optional[List[dict]]:
+        """
+        Fetch price history from the CLOB API.
+        
+        Args:
+            token_id: The CLOB token ID (YES or NO token).
+            interval: Time window – '1h', '6h', '1d', '1w', 'max'.
+        
+        Returns:
+            List of {t: timestamp, p: price} or None on error.
+        """
+        cache_key = f"price_hist_{token_id}_{interval}"
+        
+        if cache_key in self._price_cache:
+            return self._price_cache[cache_key]
+        
+        async with self._semaphore:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                try:
+                    response = await client.get(
+                        f"{self.CLOB_BASE_URL}/prices-history",
+                        params={
+                            "market": token_id,
+                            "interval": interval,
+                            "fidelity": 60,  # 1-hour resolution
+                        }
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    history = data.get("history", [])
+                    self._price_cache[cache_key] = history
+                    return history
+                except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                    print(f"CLOB price history error for {token_id[:12]}...: {e}")
+                    return None
+    
+    async def get_7d_average_price(self, token_id: str) -> Optional[float]:
+        """
+        Get the 7-day average price for a token from the CLOB API.
+        
+        Returns:
+            Average price over the last week, or None if no data.
+        """
+        history = await self.fetch_price_history(token_id, interval="1w")
+        
+        if not history:
+            return None
+        
+        prices = [float(point.get("p", 0)) for point in history if point.get("p") is not None]
+        
+        if not prices:
+            return None
+        
+        return sum(prices) / len(prices)
+    
+    async def get_7d_averages_batch(self, token_ids: List[str]) -> Dict[str, float]:
+        """
+        Batch fetch 7-day averages for multiple tokens.
+        Returns mapping of token_id -> average_price.
+        """
+        results: Dict[str, float] = {}
+        
+        # Run requests concurrently (respecting semaphore rate limit)
+        tasks = [self.get_7d_average_price(tid) for tid in token_ids]
+        averages = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for token_id, avg in zip(token_ids, averages):
+            if isinstance(avg, float) and avg > 0:
+                results[token_id] = avg
+        
+        return results
+
 
 # Global client instance
 gamma_client = GammaAPIClient()

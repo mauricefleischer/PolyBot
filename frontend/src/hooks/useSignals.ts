@@ -16,6 +16,8 @@ async function fetchSignals(
     params.set('kelly_multiplier', riskSettings.kellyMultiplier.toString());
     params.set('max_risk_cap', riskSettings.maxRiskCap.toString());
     params.set('hide_lottery', riskSettings.hideLottery.toString());
+    params.set('longshot_tolerance', (riskSettings.longshotTolerance ?? 1.0).toString());
+    params.set('trend_mode', (riskSettings.trendMode ?? true).toString());
 
     const response = await fetch(`${API_BASE}/signals?${params}`);
     if (!response.ok) {
@@ -70,6 +72,8 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     maxRiskCap: 0.05,
     minWallets: 2,
     hideLottery: false,
+    longshotTolerance: 1.0,
+    trendMode: true,
 };
 
 // ============================================================================

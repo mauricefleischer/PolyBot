@@ -15,6 +15,16 @@ export interface KellyBreakdown {
     error?: string;
 }
 
+export interface AlphaBreakdown {
+    base: number;
+    flb: number;
+    momentum: number;
+    smart_short: number;
+    freshness: number;
+    total: number;
+    details: string[];
+}
+
 export interface Signal {
     group_key: string;
     market_id: string;
@@ -28,7 +38,7 @@ export interface Signal {
     avg_entry_price: number;
     current_price: number;
     alpha_score: number;
-    alpha_breakdown: string[];
+    alpha_breakdown: AlphaBreakdown;
     recommended_size: number;
     kelly_breakdown: KellyBreakdown;
 }
@@ -39,6 +49,8 @@ export interface RiskSettings {
     minWallets: number;
     hideLottery: boolean;
     connectedWallet?: string;
+    longshotTolerance: number;
+    trendMode: boolean;
 }
 
 export interface PortfolioPosition {

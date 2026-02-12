@@ -12,6 +12,8 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     minWallets: 2,
     hideLottery: false,
     connectedWallet: undefined,
+    longshotTolerance: 1.0,
+    trendMode: true,
 };
 
 interface ServerSettings {
@@ -20,6 +22,8 @@ interface ServerSettings {
     min_wallets: number;
     hide_lottery: boolean;
     connected_wallet: string | null;
+    longshot_tolerance: number;
+    trend_mode: boolean;
 }
 
 // Convert server format to frontend format
@@ -30,6 +34,8 @@ function fromServer(server: ServerSettings): RiskSettings {
         minWallets: server.min_wallets,
         hideLottery: server.hide_lottery,
         connectedWallet: server.connected_wallet || undefined,
+        longshotTolerance: server.longshot_tolerance ?? 1.0,
+        trendMode: server.trend_mode ?? true,
     };
 }
 
@@ -41,6 +47,8 @@ function toServer(settings: Partial<RiskSettings>): Partial<ServerSettings> {
     if (settings.minWallets !== undefined) result.min_wallets = settings.minWallets;
     if (settings.hideLottery !== undefined) result.hide_lottery = settings.hideLottery;
     if (settings.connectedWallet !== undefined) result.connected_wallet = settings.connectedWallet;
+    if (settings.longshotTolerance !== undefined) result.longshot_tolerance = settings.longshotTolerance;
+    if (settings.trendMode !== undefined) result.trend_mode = settings.trendMode;
     return result;
 }
 

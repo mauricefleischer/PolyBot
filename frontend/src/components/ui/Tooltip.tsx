@@ -89,17 +89,62 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
     );
 }
 
+interface AlphaBreakdownData {
+    base?: number;
+    flb?: number;
+    momentum?: number;
+    smart_short?: number;
+    freshness?: number;
+    total?: number;
+    details?: string[];
+}
+
 interface AlphaTooltipContentProps {
     score: number;
-    breakdown: string[];
+    breakdown: AlphaBreakdownData | string[];
 }
 
 export function AlphaTooltipContent({ score, breakdown }: AlphaTooltipContentProps) {
+    // Handle both v1 (string[]) and v2 (structured object) formats
+    const isV2 = breakdown && !Array.isArray(breakdown) && typeof breakdown === 'object';
+
+    const scoreColor = score >= 70
+        ? 'text-emerald-400'
+        : score >= 40
+            ? 'text-yellow-400'
+            : 'text-red-400';
+
+    if (isV2) {
+        const b = breakdown as AlphaBreakdownData;
+        return (
+            <div className="space-y-1.5 min-w-[220px]">
+                <div className={`font-bold ${scoreColor}`}>
+                    Alpha Score: {score}/100
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400 border-t border-slate-700 pt-1">
+                    <span>Base</span><span className="text-right">{b.base ?? 50}</span>
+                    <span>FLB</span><span className={`text-right ${(b.flb ?? 0) > 0 ? 'text-emerald-400' : (b.flb ?? 0) < 0 ? 'text-red-400' : ''}`}>{(b.flb ?? 0) > 0 ? '+' : ''}{b.flb ?? 0}</span>
+                    <span>Momentum</span><span className={`text-right ${(b.momentum ?? 0) > 0 ? 'text-emerald-400' : (b.momentum ?? 0) < 0 ? 'text-red-400' : ''}`}>{(b.momentum ?? 0) > 0 ? '+' : ''}{b.momentum ?? 0}</span>
+                    <span>Smart Short</span><span className={`text-right ${(b.smart_short ?? 0) > 0 ? 'text-emerald-400' : ''}`}>{(b.smart_short ?? 0) > 0 ? '+' : ''}{b.smart_short ?? 0}</span>
+                    <span>Freshness</span><span className={`text-right ${(b.freshness ?? 0) > 0 ? 'text-emerald-400' : ''}`}>{(b.freshness ?? 0) > 0 ? '+' : ''}{b.freshness ?? 0}</span>
+                </div>
+                {b.details && b.details.length > 1 && (
+                    <div className="text-slate-300 text-[10px] space-y-0.5 border-t border-slate-700 pt-1">
+                        {b.details.slice(1).map((item, i) => (
+                            <div key={i}>{item}</div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Fallback for v1 format (string array)
     return (
         <div className="space-y-1">
-            <div className="font-semibold text-emerald-400">Alpha Score: {score}</div>
+            <div className={`font-semibold ${scoreColor}`}>Alpha Score: {score}</div>
             <div className="text-slate-300 text-[10px] space-y-0.5">
-                {breakdown.map((item, i) => (
+                {(breakdown as string[]).map((item, i) => (
                     <div key={i}>{item}</div>
                 ))}
             </div>

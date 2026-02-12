@@ -72,9 +72,11 @@ async def root():
 async def get_signals(
     min_wallets: int = Query(default=1, ge=1, le=10, description="Minimum wallet consensus"),
     user_balance: Optional[float] = Query(default=None, ge=0, description="User USDC balance for sizing"),
-    kelly_multiplier: float = Query(default=0.25, ge=0.1, le=1.0, description="Kelly fraction (0.1=Conservative, 0.25=Balanced, 0.5=Aggressive)"),
-    max_risk_cap: float = Query(default=0.05, ge=0.01, le=0.20, description="Maximum risk per trade (1%-20%)"),
+    kelly_multiplier: float = Query(default=0.25, ge=0.1, le=1.0, description="Kelly fraction"),
+    max_risk_cap: float = Query(default=0.05, ge=0.01, le=0.20, description="Maximum risk per trade"),
     hide_lottery: bool = Query(default=False, description="Hide signals with Alpha Score < 30"),
+    longshot_tolerance: float = Query(default=1.0, ge=0.5, le=1.5, description="FLB penalty scaling"),
+    trend_mode: bool = Query(default=True, description="Enable momentum scoring"),
 ):
     """
     Get ranked consensus signals from tracked whales.
@@ -93,6 +95,8 @@ async def get_signals(
             kelly_multiplier=kelly_multiplier,
             max_risk_cap=max_risk_cap,
             hide_lottery=hide_lottery,
+            longshot_tolerance=longshot_tolerance,
+            trend_mode=trend_mode,
         )
         return signals
     except Exception as e:
@@ -180,6 +184,8 @@ class SettingsRequest(BaseModel):
     min_wallets: Optional[int] = None
     hide_lottery: Optional[bool] = None
     connected_wallet: Optional[str] = None
+    longshot_tolerance: Optional[float] = None
+    trend_mode: Optional[bool] = None
 
 
 class SettingsResponse(BaseModel):
@@ -189,6 +195,8 @@ class SettingsResponse(BaseModel):
     min_wallets: int
     hide_lottery: bool
     connected_wallet: Optional[str]
+    longshot_tolerance: float
+    trend_mode: bool
 
 
 @app.get("/api/v1/settings", response_model=SettingsResponse)
@@ -196,13 +204,15 @@ async def get_settings():
     """Get user settings from database."""
     from app.services.database import db_service
     
-    settings = db_service.get_settings()
+    settings_data = db_service.get_settings()
     return SettingsResponse(
-        kelly_multiplier=settings.kelly_multiplier,
-        max_risk_cap=settings.max_risk_cap,
-        min_wallets=settings.min_wallets,
-        hide_lottery=settings.hide_lottery,
-        connected_wallet=settings.connected_wallet,
+        kelly_multiplier=settings_data.kelly_multiplier,
+        max_risk_cap=settings_data.max_risk_cap,
+        min_wallets=settings_data.min_wallets,
+        hide_lottery=settings_data.hide_lottery,
+        connected_wallet=settings_data.connected_wallet,
+        longshot_tolerance=settings_data.longshot_tolerance,
+        trend_mode=settings_data.trend_mode,
     )
 
 
@@ -217,6 +227,8 @@ async def update_settings(request: SettingsRequest):
         min_wallets=request.min_wallets,
         hide_lottery=request.hide_lottery,
         connected_wallet=request.connected_wallet,
+        longshot_tolerance=request.longshot_tolerance,
+        trend_mode=request.trend_mode,
     )
     
     return SettingsResponse(
@@ -225,6 +237,8 @@ async def update_settings(request: SettingsRequest):
         min_wallets=updated.min_wallets,
         hide_lottery=updated.hide_lottery,
         connected_wallet=updated.connected_wallet,
+        longshot_tolerance=updated.longshot_tolerance,
+        trend_mode=updated.trend_mode,
     )
 
 

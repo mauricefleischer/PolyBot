@@ -3,10 +3,41 @@ Pydantic models and dataclasses for the Consensus Terminal.
 Strict typing for financial data validation.
 """
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict
 from pydantic import BaseModel, Field, ConfigDict
+
+
+@dataclass
+class ScoringConfig:
+    """User-tunable scoring parameters for Alpha Score 2.0."""
+    longshot_tolerance: float = 1.0   # 0.5 (lenient) to 1.5 (strict)
+    trend_mode: bool = True           # Enable/disable momentum scoring
+
+
+@dataclass
+class ScoreBreakdown:
+    """Structured Alpha Score 2.0 breakdown for UI tooltips."""
+    base: int = 50
+    flb: int = 0            # -40 to +15
+    momentum: int = 0       # -10 to +10
+    smart_short: int = 0    # 0 to +20
+    freshness: int = 0      # 0 to +10
+    total: int = 50
+    details: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict:
+        return {
+            "base": self.base,
+            "flb": self.flb,
+            "momentum": self.momentum,
+            "smart_short": self.smart_short,
+            "freshness": self.freshness,
+            "total": self.total,
+            "details": self.details,
+        }
 
 
 @dataclass
@@ -26,6 +57,8 @@ class RawSignal:
     market_name: str = ""
     outcome_index: int = 0
     market_slug: str = ""
+    token_id: str = ""  # CLOB token ID for price history lookups
+    timestamp: Optional[datetime] = None  # Position creation time for freshness
 
 
 class SignalSchema(BaseModel):
@@ -53,8 +86,8 @@ class SignalSchema(BaseModel):
     current_price: float = Field(ge=0, le=1, description="Current market price")
     
     # Scoring
-    alpha_score: int = Field(ge=0, le=100, description="Becker Alpha Score")
-    alpha_breakdown: List[str] = Field(default=[], description="Score breakdown for tooltip")
+    alpha_score: int = Field(ge=0, le=100, description="Becker Alpha Score 2.0")
+    alpha_breakdown: dict = Field(default={}, description="Structured score breakdown for tooltip")
     
     # Risk Sizing (calculated for default user)
     recommended_size: float = Field(ge=0, description="Recommended position size in USDC")

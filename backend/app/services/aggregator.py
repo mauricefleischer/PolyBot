@@ -1,16 +1,26 @@
 """
 Consensus Engine - The Logic Core.
-Aggregates wallet positions and calculates Becker Alpha scores.
+Aggregates wallet positions and calculates Becker Alpha Score 2.0.
+
+Alpha Score 2.0 is a multi-factor model based on:
+- Favorite-Longshot Bias (FLB) from Wolfers & Zitzewitz 2004
+- Anchoring / Momentum breakout signals
+- Sector-weighted Smart Short scoring
+- Position freshness / time decay
 """
 from __future__ import annotations
 import json
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 from app.core.config import settings
-from app.models.schemas import RawSignal, SignalSchema, PortfolioPositionSchema, PortfolioSchema
+from app.models.schemas import (
+    RawSignal, SignalSchema, PortfolioPositionSchema, PortfolioSchema,
+    ScoringConfig, ScoreBreakdown,
+)
 from app.services.polymarket import gamma_client
 from app.services.chain_data import web3_client
 
@@ -24,10 +34,13 @@ class AggregatedSignal:
     outcome_label: str
     direction: str
     category: str
-    wallet_addresses: set
-    total_conviction: float
-    weighted_entry_sum: float  # For calculating weighted avg entry
-    current_price: float
+    wallet_addresses: set = field(default_factory=set)
+    total_conviction: float = 0.0
+    weighted_entry_sum: float = 0.0
+    current_price: float = 0.0
+    market_slug: str = ""
+    token_id: str = ""  # CLOB token ID for price history
+    earliest_timestamp: Optional[datetime] = None
     
     @property
     def wallet_count(self) -> int:
@@ -43,7 +56,7 @@ class AggregatedSignal:
 class ConsensusEngine:
     """
     Master class for aggregating whale positions and scoring trades.
-    Implements the Becker Alpha scoring algorithm.
+    Implements the Becker Alpha Score 2.0 algorithm.
     """
     
     def __init__(self):
@@ -96,6 +109,10 @@ class ConsensusEngine:
         """Get list of tracked wallets."""
         return self._tracked_wallets.copy()
     
+    # =========================================================================
+    # Position Fetching & Netting
+    # =========================================================================
+    
     async def _fetch_wallet_positions(self, wallet_address: str) -> list[RawSignal]:
         """
         Fetch and normalize positions for a single wallet.
@@ -139,10 +156,19 @@ class ConsensusEngine:
                     market_name = gamma_client.get_market_name(market_id)
                 
                 category = gamma_client.get_market_category(market_id)
-                outcome_label = pos.get("title", outcome)  # Use title as outcome label
+                outcome_label = pos.get("title", outcome)
                 
                 # The data-api uses 'asset' for token ID
                 token_id = pos.get("asset", pos.get("tokenId", pos.get("token_id", "")))
+                
+                # Extract timestamp if available
+                timestamp_str = pos.get("createdAt", pos.get("created_at", None))
+                timestamp = None
+                if timestamp_str:
+                    try:
+                        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+                    except (ValueError, AttributeError):
+                        pass
                 
                 market_key = f"{market_id}_{outcome}"
                 mp = market_positions[market_key]
@@ -150,6 +176,7 @@ class ConsensusEngine:
                 mp["market_slug"] = market_slug
                 mp["outcome_label"] = outcome_label
                 mp["category"] = category
+                mp["timestamp"] = timestamp
                 
                 if outcome.upper() == "YES":
                     mp["yes_size"] += size
@@ -175,7 +202,6 @@ class ConsensusEngine:
                     yes_size -= min_size
                     no_size -= min_size
                 
-                # Use curPrice from data-api directly instead of fetching again
                 if yes_size > 0:
                     current_price = mp.get("yes_cur_price", 0.5)
                     raw_signals.append(RawSignal(
@@ -185,10 +211,12 @@ class ConsensusEngine:
                         direction="YES",
                         entry_price=mp["yes_entry"],
                         current_price=current_price,
-                        size_usdc=yes_size * mp["yes_entry"],  # Size in USDC
+                        size_usdc=yes_size * mp["yes_entry"],
                         category=mp["category"],
                         market_name=mp["market_name"],
                         market_slug=mp.get("market_slug", ""),
+                        token_id=mp.get("yes_token_id", ""),
+                        timestamp=mp.get("timestamp"),
                     ))
                 
                 if no_size > 0:
@@ -204,6 +232,8 @@ class ConsensusEngine:
                         category=mp["category"],
                         market_name=mp["market_name"],
                         market_slug=mp.get("market_slug", ""),
+                        token_id=mp.get("no_token_id", ""),
+                        timestamp=mp.get("timestamp"),
                     ))
 
         except Exception as e:
@@ -211,134 +241,172 @@ class ConsensusEngine:
         
         return raw_signals
 
-    # ... (skipping calculate_alpha_score methods) ...
-
-    async def get_ranked_signals(
-        self,
-        min_wallets: int = 1,
-        user_balance: Optional[float] = None,
-        kelly_multiplier: float = 0.25,
-        max_risk_cap: float = 0.05,
-        hide_lottery: bool = False,
-    ) -> List[SignalSchema]:
-        """
-        Get aggregated, ranked signals with Kelly sizing.
-        """
-        raw_signals = await self.aggregate_positions()
-        
-        # Group by Market + Outcome + Direction
-        grouped_signals: Dict[str, AggregatedSignal] = {}
-        
-        for sig in raw_signals:
-            key = f"{sig.market_id}_{sig.outcome_label}_{sig.direction}"
-            
-            if key not in grouped_signals:
-                grouped_signals[key] = AggregatedSignal(
-                    id=key,
-                    market_id=sig.market_id,
-                    market_name=sig.market_name,
-                    outcome_label=sig.outcome_label,
-                    direction=sig.direction,
-                    category=sig.category,
-                    market_slug=sig.market_slug,
-                )
-            
-            group = grouped_signals[key]
-            group.wallets.add(sig.wallet_address)
-            group.total_conviction += sig.size_usdc
-            group.current_price = sig.current_price  # Assess latest price
-            
-            # Weighted average entry
-            current_total_value = (group.avg_entry_price * (group.total_conviction - sig.size_usdc)) + (sig.entry_price * sig.size_usdc)
-            if group.total_conviction > 0:
-                group.avg_entry_price = current_total_value / group.total_conviction
-            else:
-                group.avg_entry_price = sig.entry_price
-
-        # ... (rest of filtering) ...
-
-        results = []
-        for group in grouped_signals.values():
-            if len(group.wallets) < min_wallets:
-                continue
-                
-            alpha_score, text_breakdown = self.calculate_alpha_score(group)
-            
-            if hide_lottery and alpha_score < 30:
-                continue
-            
-            recommended_size = 0.0
-            kelly_breakdown = {}
-            
-            if user_balance:
-                recommended_size, kelly_breakdown = self.calculate_kelly_size(
-                    group.current_price,
-                    alpha_score,
-                    user_balance,
-                    multiplier=kelly_multiplier,
-                    max_risk_cap=max_risk_cap
-                )
-            
-            results.append(SignalSchema(
-                group_key=group.id,
-                market_id=group.market_id,
-                market_name=group.market_name,
-                market_slug=group.market_slug,
-                outcome_label=group.outcome_label,
-                direction=group.direction,
-                category=group.category,
-                wallet_count=len(group.wallets),
-                total_conviction=group.total_conviction,
-                avg_entry_price=group.avg_entry_price,
-                current_price=group.current_price,
-                alpha_score=alpha_score,
-                alpha_breakdown=text_breakdown,
-                recommended_size=recommended_size,
-                kelly_breakdown=kelly_breakdown,
-            ))
-        
-        # Sort by Wallet Count DESC, then Alpha Score DESC
-        results.sort(key=lambda x: (x.wallet_count, x.alpha_score, x.total_conviction), reverse=True)
-        
-        return results
+    # =========================================================================
+    # Alpha Score 2.0 – Multi-Factor Scoring Engine
+    # =========================================================================
     
-    def calculate_alpha_score(self, signal: AggregatedSignal) -> tuple[int, List[str]]:
+    def calculate_alpha_score_v2(
+        self,
+        signal: AggregatedSignal,
+        market_7d_avg: Optional[float] = None,
+        config: Optional[ScoringConfig] = None,
+    ) -> ScoreBreakdown:
         """
-        Calculate Becker Alpha Score (0-100) with breakdown for tooltips.
+        Calculate Becker Alpha Score 2.0 (0-100) with structured breakdown.
         
-        Returns: (score, breakdown_list)
+        Sub-Factors:
+          1. FLB Score: Non-linear price zone penalties/boosts (Wolfers 2004)
+          2. Momentum: Price vs 7d moving average (Anchoring breakout)
+          3. Smart Short: Direction × Sector sentiment multiplier
+          4. Time Decay: Position freshness bonus
+        
+        Returns: ScoreBreakdown with total score and per-factor details.
         """
-        score = 50  # Base score
-        breakdown = ["Base: 50"]
+        if config is None:
+            config = ScoringConfig()
         
-        # Rule 1: Smart Short Bonus
+        breakdown = ScoreBreakdown()
+        breakdown.details.append("Base: 50")
+        
+        # -------------------------------------------------------------------
+        # Sub-Factor 1: FLB Score (Favorite-Longshot Bias)
+        # Non-linear price zones based on Wolfers & Zitzewitz (2004)
+        # -------------------------------------------------------------------
+        p = signal.current_price
+        lt = config.longshot_tolerance  # User-tunable scaling (0.5–1.5)
+        
+        if p < 0.05:
+            # Lottery Zone: massively overpriced by retail
+            raw_flb = -40
+            breakdown.flb = int(raw_flb * lt)
+            breakdown.details.append(
+                f"{'⛔' if lt >= 1.0 else '⚠️'} Lottery Zone ({breakdown.flb:+d}): "
+                f"Price ${p:.2f} < $0.05 — massive retail overpricing"
+            )
+        elif p < 0.15:
+            # Hope Zone: moderately overpriced
+            raw_flb = -20
+            breakdown.flb = int(raw_flb * lt)
+            breakdown.details.append(
+                f"⚠️ Hope Zone ({breakdown.flb:+d}): "
+                f"Price ${p:.2f} — moderate overpricing"
+            )
+        elif p > 0.85:
+            # Favorite Value: underpriced due to risk-aversion discount
+            breakdown.flb = 15
+            breakdown.details.append(
+                f"✅ Favorite Value (+15): "
+                f"Price ${p:.2f} > $0.85 — risk-aversion discount"
+            )
+        else:
+            # Confusion Zone: efficiently priced
+            breakdown.flb = 0
+            breakdown.details.append(
+                f"➖ Neutral Price (0): No FLB edge at ${p:.2f}"
+            )
+        
+        # -------------------------------------------------------------------
+        # Sub-Factor 2: Momentum Score (Anchoring / Breakout)
+        # Compare current price vs 7-day moving average
+        # -------------------------------------------------------------------
+        if config.trend_mode and market_7d_avg is not None and market_7d_avg > 0:
+            ratio = p / market_7d_avg
+            pct_diff = (ratio - 1.0) * 100
+            
+            if ratio > 1.05:
+                # Bullish breakout: price is 5%+ above 7d avg
+                breakdown.momentum = 10
+                breakdown.details.append(
+                    f"✅ Breakout (+10): Price {pct_diff:+.1f}% above weekly average"
+                )
+            elif ratio < 0.95:
+                # Falling knife: price is 5%+ below 7d avg
+                breakdown.momentum = -10
+                breakdown.details.append(
+                    f"⚠️ Falling Knife (-10): Price {pct_diff:+.1f}% below weekly average"
+                )
+            else:
+                breakdown.momentum = 0
+                breakdown.details.append(
+                    f"➖ No Momentum (0): Price near weekly average ({pct_diff:+.1f}%)"
+                )
+        elif not config.trend_mode:
+            breakdown.momentum = 0
+            breakdown.details.append("➖ Momentum (0): Trend mode disabled")
+        else:
+            breakdown.momentum = 0
+            breakdown.details.append("➖ Momentum (0): Insufficient price history")
+        
+        # -------------------------------------------------------------------
+        # Sub-Factor 3: Smart Short Score (Direction × Sector Sentiment)
+        # Sector-weighted bonus for contrarian NO bets
+        # -------------------------------------------------------------------
         if signal.direction == "NO":
-            score += 20
-            breakdown.append("+20 Smart Short")
+            if signal.category in ("Sports", "Politics"):
+                # High optimism tax: strong desirability bias
+                breakdown.smart_short = 20
+                breakdown.details.append(
+                    f"✅ Smart Short (+20): Against public sentiment in {signal.category}"
+                )
+            elif signal.category == "Entertainment":
+                breakdown.smart_short = 15
+                breakdown.details.append(
+                    f"✅ Smart Short (+15): Against sentiment in {signal.category}"
+                )
+            else:
+                # Finance/Other: efficient markets, smaller edge
+                breakdown.smart_short = 10
+                breakdown.details.append(
+                    f"✅ Smart Short (+10): NO bet in {signal.category}"
+                )
+        else:
+            breakdown.smart_short = 0
+            # No detail line for YES (not a penalty)
         
-        # Rule 2: Longshot Penalty
-        if signal.direction == "YES" and signal.current_price < 0.10:
-            score -= 30
-            breakdown.append("-30 Longshot")
+        # -------------------------------------------------------------------
+        # Sub-Factor 4: Time Decay / Freshness
+        # Fresh signals have higher predictive power
+        # Formula: max(0, 10 - 2 × days_since_entry)
+        # -------------------------------------------------------------------
+        if signal.earliest_timestamp:
+            now = datetime.now(timezone.utc)
+            days_since = (now - signal.earliest_timestamp).total_seconds() / 86400
+            freshness = max(0, int(10 - 2 * days_since))
+            breakdown.freshness = freshness
+            
+            if days_since < 1:
+                breakdown.details.append(
+                    f"✅ Fresh Signal (+{freshness}): Detected < 24h ago"
+                )
+            elif freshness > 0:
+                breakdown.details.append(
+                    f"✅ Recent Signal (+{freshness}): {days_since:.0f} days old"
+                )
+            else:
+                breakdown.details.append(
+                    "➖ Stale Signal (0): > 5 days old"
+                )
+        else:
+            breakdown.freshness = 0
+            breakdown.details.append("➖ Freshness (0): No timestamp data")
         
-        # Rule 3: Extreme Favorite Boost
-        if signal.direction == "YES" and signal.current_price > 0.80:
-            score += 10
-            breakdown.append("+10 Favorite")
+        # -------------------------------------------------------------------
+        # Final Score: Clamp to [0, 100]
+        # -------------------------------------------------------------------
+        raw_total = (
+            breakdown.base
+            + breakdown.flb
+            + breakdown.momentum
+            + breakdown.smart_short
+            + breakdown.freshness
+        )
+        breakdown.total = max(0, min(100, raw_total))
         
-        # Rule 4: Sector Inefficiency Bonus
-        if signal.category in ["Sports", "Politics", "Entertainment"]:
-            score += 5
-            breakdown.append("+5 Sector")
-        
-        # Rule 5: Conviction Multiplier
-        if signal.wallet_count >= 3:
-            score += 10
-            breakdown.append("+10 Consensus")
-        
-        # Clamp to 0-100
-        final_score = max(0, min(100, score))
-        return final_score, breakdown
+        return breakdown
+    
+    # =========================================================================
+    # Kelly Criterion Position Sizing
+    # =========================================================================
     
     def calculate_kelly_size(
         self,
@@ -386,7 +454,6 @@ class ConsensusEngine:
         real_prob = min(real_prob, 0.85)
         
         # Step C: Kelly Formula
-        # f = (p * b - (1-p)) / b = (p * b - q) / b where q = 1-p
         q = 1 - real_prob
         kelly_fraction = (real_prob * net_odds - q) / net_odds
         
@@ -406,7 +473,6 @@ class ConsensusEngine:
         # Calculate final size
         recommended_size = user_balance * final_percent
         
-        # Build breakdown for tooltip
         breakdown = {
             "net_odds": round(net_odds, 2),
             "real_prob": round(real_prob, 2),
@@ -419,7 +485,10 @@ class ConsensusEngine:
         }
         
         return round(recommended_size, 2), breakdown
-    
+
+    # =========================================================================
+    # Signal Aggregation & Ranking
+    # =========================================================================
 
     async def aggregate_signals(self) -> list[AggregatedSignal]:
         """
@@ -447,9 +516,8 @@ class ConsensusEngine:
                     outcome_label=signal.outcome_label,
                     direction=signal.direction,
                     category=signal.category,
-                    wallet_addresses=set(),
-                    total_conviction=0.0,
-                    weighted_entry_sum=0.0,
+                    market_slug=getattr(signal, 'market_slug', ''),
+                    token_id=getattr(signal, 'token_id', ''),
                     current_price=signal.current_price,
                 )
             
@@ -457,8 +525,16 @@ class ConsensusEngine:
             agg.wallet_addresses.add(signal.wallet_address.lower())
             agg.total_conviction += signal.size_usdc
             agg.weighted_entry_sum += signal.entry_price * signal.size_usdc
-            # Update price to latest
             agg.current_price = signal.current_price
+            
+            # Keep the first non-empty token_id
+            if not agg.token_id and getattr(signal, 'token_id', ''):
+                agg.token_id = signal.token_id
+            
+            # Track earliest timestamp for freshness scoring
+            if signal.timestamp:
+                if agg.earliest_timestamp is None or signal.timestamp < agg.earliest_timestamp:
+                    agg.earliest_timestamp = signal.timestamp
         
         return list(groups.values())
     
@@ -468,10 +544,13 @@ class ConsensusEngine:
         user_balance: Optional[float] = None,
         kelly_multiplier: float = 0.25,
         max_risk_cap: float = 0.05,
-        hide_lottery: bool = False
+        hide_lottery: bool = False,
+        longshot_tolerance: float = 1.0,
+        trend_mode: bool = True,
     ) -> list[SignalSchema]:
         """
         Get fully processed, ranked signals for the API.
+        Uses Alpha Score 2.0 multi-factor model.
         
         Ranking:
         1. Filter: wallet_count >= min_wallets
@@ -481,18 +560,41 @@ class ConsensusEngine:
         """
         aggregated = await self.aggregate_signals()
         
+        # Fetch 7-day price averages from CLOB API for momentum scoring
+        token_ids = [agg.token_id for agg in aggregated if agg.token_id]
+        price_averages: Dict[str, float] = {}
+        if trend_mode and token_ids:
+            try:
+                price_averages = await gamma_client.get_7d_averages_batch(token_ids)
+            except Exception as e:
+                print(f"Warning: Failed to fetch price history from CLOB API: {e}")
+        
+        # Build scoring config from user settings
+        scoring_config = ScoringConfig(
+            longshot_tolerance=longshot_tolerance,
+            trend_mode=trend_mode,
+        )
+        
         # Filter by minimum wallets
         filtered = [s for s in aggregated if s.wallet_count >= min_wallets]
         
         # Calculate scores and convert to schema
         signals = []
         for agg in filtered:
-            alpha_score, alpha_breakdown = self.calculate_alpha_score(agg)
+            # Get 7-day average for this market's token
+            market_7d_avg = price_averages.get(agg.token_id) if agg.token_id else None
+            
+            # Alpha Score 2.0
+            score_breakdown = self.calculate_alpha_score_v2(
+                agg, market_7d_avg, scoring_config
+            )
+            alpha_score = score_breakdown.total
             
             # Skip lottery tickets if filter is enabled
             if hide_lottery and alpha_score < 30:
                 continue
             
+            # Kelly sizing
             rec_size, kelly_breakdown = self.calculate_kelly_size(
                 current_price=agg.current_price,
                 alpha_score=alpha_score,
@@ -506,6 +608,7 @@ class ConsensusEngine:
                 group_key=agg.group_key,
                 market_id=agg.market_id,
                 market_name=agg.market_name,
+                market_slug=agg.market_slug,
                 outcome_label=agg.outcome_label,
                 direction=agg.direction,
                 category=agg.category,
@@ -514,7 +617,7 @@ class ConsensusEngine:
                 avg_entry_price=round(agg.avg_entry_price, 4),
                 current_price=round(agg.current_price, 4),
                 alpha_score=alpha_score,
-                alpha_breakdown=alpha_breakdown,
+                alpha_breakdown=score_breakdown.to_dict(),
                 recommended_size=rec_size,
                 kelly_breakdown=kelly_breakdown,
             ))
@@ -525,6 +628,10 @@ class ConsensusEngine:
         )
         
         return signals
+    
+    # =========================================================================
+    # Portfolio Validation
+    # =========================================================================
     
     async def get_user_portfolio(
         self, 
@@ -579,7 +686,7 @@ class ConsensusEngine:
                 elif pnl_percent > 20:
                     status = "TRIM"
                 else:
-                    status = "VALIDATED"  # No consensus either way
+                    status = "VALIDATED"
                 
                 whale_consensus = False
                 whale_count = 0

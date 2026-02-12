@@ -28,6 +28,8 @@ class UserSettings:
     min_wallets: int = 2
     hide_lottery: bool = False
     connected_wallet: Optional[str] = None
+    longshot_tolerance: float = 1.0
+    trend_mode: bool = True
 
 
 class DatabaseService:
@@ -88,10 +90,34 @@ class DatabaseService:
                 )
             """)
             
+            # Price history table for momentum scoring
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS price_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    market_id TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_price_history_market 
+                ON price_history(market_id, recorded_at)
+            """)
+            
             # Insert default settings if not exists
             cursor.execute("""
                 INSERT OR IGNORE INTO user_settings (user_id) VALUES ('default')
             """)
+            
+            # Migrate: add new columns if missing
+            try:
+                cursor.execute("ALTER TABLE user_settings ADD COLUMN longshot_tolerance REAL DEFAULT 1.0")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            try:
+                cursor.execute("ALTER TABLE user_settings ADD COLUMN trend_mode BOOLEAN DEFAULT 1")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
     
     # =========================================================================
     # Wallet Operations
@@ -169,7 +195,9 @@ class DatabaseService:
                     max_risk_cap=row["max_risk_cap"],
                     min_wallets=row["min_wallets"],
                     hide_lottery=bool(row["hide_lottery"]),
-                    connected_wallet=row["connected_wallet"]
+                    connected_wallet=row["connected_wallet"],
+                    longshot_tolerance=row["longshot_tolerance"] if "longshot_tolerance" in row.keys() else 1.0,
+                    trend_mode=bool(row["trend_mode"]) if "trend_mode" in row.keys() else True,
                 )
             
             return UserSettings(user_id=user_id)
@@ -181,7 +209,9 @@ class DatabaseService:
         max_risk_cap: Optional[float] = None,
         min_wallets: Optional[int] = None,
         hide_lottery: Optional[bool] = None,
-        connected_wallet: Optional[str] = None
+        connected_wallet: Optional[str] = None,
+        longshot_tolerance: Optional[float] = None,
+        trend_mode: Optional[bool] = None
     ) -> UserSettings:
         """Update user settings."""
         current = self.get_settings(user_id)
@@ -190,15 +220,18 @@ class DatabaseService:
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT OR REPLACE INTO user_settings 
-                (user_id, kelly_multiplier, max_risk_cap, min_wallets, hide_lottery, connected_wallet, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                (user_id, kelly_multiplier, max_risk_cap, min_wallets, hide_lottery, 
+                 connected_wallet, longshot_tolerance, trend_mode, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 user_id,
                 kelly_multiplier if kelly_multiplier is not None else current.kelly_multiplier,
                 max_risk_cap if max_risk_cap is not None else current.max_risk_cap,
                 min_wallets if min_wallets is not None else current.min_wallets,
                 hide_lottery if hide_lottery is not None else current.hide_lottery,
-                connected_wallet if connected_wallet is not None else current.connected_wallet
+                connected_wallet if connected_wallet is not None else current.connected_wallet,
+                longshot_tolerance if longshot_tolerance is not None else current.longshot_tolerance,
+                trend_mode if trend_mode is not None else current.trend_mode,
             ))
         
         return self.get_settings(user_id)
@@ -245,6 +278,68 @@ class DatabaseService:
                 return count
         except (FileNotFoundError, json.JSONDecodeError):
             return 0
+    
+    # =========================================================================
+    # Price History (for Momentum Scoring)
+    # =========================================================================
+    
+    def record_price(self, market_id: str, price: float) -> None:
+        """Record a market price snapshot."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO price_history (market_id, price) VALUES (?, ?)",
+                (market_id, price)
+            )
+    
+    def record_prices_batch(self, prices: List[tuple]) -> None:
+        """Record multiple price snapshots. prices = [(market_id, price), ...]"""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                "INSERT INTO price_history (market_id, price) VALUES (?, ?)",
+                prices
+            )
+    
+    def get_7d_average(self, market_id: str) -> Optional[float]:
+        """Get the 7-day average price for a market."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT AVG(price) as avg_price
+                FROM price_history
+                WHERE market_id = ? 
+                AND recorded_at >= datetime('now', '-7 days')
+            """, (market_id,))
+            row = cursor.fetchone()
+            if row and row["avg_price"] is not None:
+                return float(row["avg_price"])
+            return None
+    
+    def get_7d_averages_batch(self) -> Dict[str, float]:
+        """Get 7-day averages for all tracked markets."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT market_id, AVG(price) as avg_price
+                FROM price_history
+                WHERE recorded_at >= datetime('now', '-7 days')
+                GROUP BY market_id
+            """)
+            return {
+                row["market_id"]: float(row["avg_price"])
+                for row in cursor.fetchall()
+            }
+    
+    def prune_old_prices(self, days: int = 14) -> int:
+        """Remove price history older than N days."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM price_history WHERE recorded_at < datetime('now', ? || ' days')",
+                (f"-{days}",)
+            )
+            return cursor.rowcount
 
 
 # Singleton instance

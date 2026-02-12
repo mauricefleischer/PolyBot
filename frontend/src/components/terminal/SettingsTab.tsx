@@ -218,6 +218,51 @@ export function SettingsTab({
                             </span>
                         </label>
                     </div>
+
+                    {/* Longshot Tolerance (Alpha 2.0) */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Longshot Tolerance: {(riskSettings.longshotTolerance ?? 1.0).toFixed(1)}x
+                        </label>
+                        <input
+                            type="range"
+                            min="0.5"
+                            max="1.5"
+                            step="0.1"
+                            value={riskSettings.longshotTolerance ?? 1.0}
+                            onChange={(e) => updateRiskSetting('longshotTolerance', parseFloat(e.target.value))}
+                            className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                        />
+                        <div className="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>Lenient (0.5x)</span>
+                            <span>Default (1.0x)</span>
+                            <span>Strict (1.5x)</span>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Scales how much longshot bets are penalized by the FLB model
+                        </p>
+                    </div>
+
+                    {/* Trend Following Mode (Alpha 2.0) */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Alpha Score 2.0
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={riskSettings.trendMode ?? true}
+                                onChange={(e) => updateRiskSetting('trendMode', e.target.checked)}
+                                className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                            />
+                            <span className="text-sm text-slate-700">
+                                Trend Following Mode
+                            </span>
+                        </label>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Enable momentum scoring (price vs 7-day average)
+                        </p>
+                    </div>
                 </div>
             </section>
 
