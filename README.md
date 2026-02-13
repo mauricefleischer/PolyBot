@@ -17,10 +17,12 @@
 9. [Fractional Kelly Criterion](#9-fractional-kelly-criterion)
 10. [Portfolio Validation](#10-portfolio-validation)
 11. [Market Classification](#11-market-classification)
-12. [Signal Ranking](#12-signal-ranking)
-13. [API Reference](#13-api-reference)
-14. [Frontend Architecture](#14-frontend-architecture)
-15. [Configuration & Parameters](#15-configuration--parameters)
+12. [Whale Scoring Engine](#12-whale-scoring-engine)
+13. [Consensus Quality Adjustment](#13-consensus-quality-adjustment)
+14. [Signal Ranking](#14-signal-ranking)
+15. [API Reference](#15-api-reference)
+16. [Frontend Architecture](#16-frontend-architecture)
+17. [Configuration & Parameters](#17-configuration--parameters)
 
 ---
 
@@ -515,7 +517,56 @@ Categories affect the **Smart Short** sub-factor of Alpha Score 2.0 (see Section
 
 ---
 
-## 12. Signal Ranking
+## 12. Whale Scoring Engine
+
+**New in v2.1:** PolyBot now rates every tracked wallet on a **0–100 scale** based on four behavioral pillars. This score determines the wallet's influence on the "Consensus Quality" multiplier.
+
+### The 4 Pillars
+
+| Pillar | Weight | Metric | Purpose |
+|--------|--------|--------|---------|
+| **ROI / Performance** | 35% | Modified Information Ratio | Rewards consistent profitability & high win rate. Penalizes losses. |
+| **Discipline** | 25% | Disposition Effect Ratio | Rewards "Diamond Hands" (cutting losses fast, letting winners run). |
+| **Precision** | 20% | Turnover Index | Penalizes overtrading/churning. Rewards "Sniper" behavior. |
+| **Timing** | 20% | Pioneer Score | Rewards entering early (contrarian) vs. late (FOMO). |
+
+### Tiers & Tags
+
+| Score | Tier | Visual Tag | Meaning |
+|-------|------|------------|---------|
+| **80–100** | **ELITE** | `ELITE` (Purple) | Use full position sizing. |
+| **60–79** | **PRO** | `PRO` (Green) | Standard high-quality signal. |
+| **40–59** | **STD** | `STD` (Grey) | Average performance. |
+| **0–39** | **WEAK** | `WEAK` (Red) | Heavily dampened influence. |
+
+---
+
+## 13. Consensus Quality Adjustment
+
+The **Risk Engine** uses the average Whale Score of all participants in a signal to apply a **Confidence Dampener** to the final position size. This ensures you bet big only when the *best* whales agree.
+
+### Formula
+
+```python
+avg_score = sum(whale_scores) / count
+```
+
+| Average Score | dampener (D) | Size Impact |
+|---------------|--------------|-------------|
+| **> 80 (Elite)** | **1.00** | **100%** (Full Size) |
+| **60–80 (Pro)** | **0.50 – 1.00** | Linear scaling (e.g. 70 → 75% size) |
+| **50–60 (Mixed)** | **0.25 – 0.50** | Linear scaling (e.g. 55 → 37.5% size) |
+| **< 50 (Weak)** | **0.25** | **25%** (Quarter Size) |
+
+**Example:**
+-   Kelly calculates optimal size: **$1,000**
+-   Consensus: 3 Whales (Scores: 45, 55, 50) → Avg: 50
+-   Dampener: 0.25
+-   **Final Bet:** $1,000 × 0.25 = **$250**
+
+---
+
+## 14. Signal Ranking
 
 Final signals are sorted by a **three-tier priority:**
 
@@ -537,7 +588,7 @@ ORDER BY
 
 ---
 
-## 13. API Reference
+## 15. API Reference
 
 All endpoints are prefixed with `/api/v1`.
 
@@ -595,7 +646,7 @@ All endpoints are prefixed with `/api/v1`.
 
 ---
 
-## 14. Frontend Architecture
+## 16. Frontend Architecture
 
 | Component | File | Purpose |
 |-----------|------|---------|
@@ -628,7 +679,7 @@ All endpoints are prefixed with `/api/v1`.
 
 ---
 
-## 15. Configuration & Parameters
+## 17. Configuration & Parameters
 
 ### Environment Variables (`.env`)
 
