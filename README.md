@@ -405,21 +405,36 @@ The Kelly Criterion calculates the **mathematically optimal bet size** to maximi
 
 ### Formula (Step by Step)
 
-```
+The Risk Engine uses a **De-Biased** version of Kelly. It doesn't trust the market price blindly.
+
+```python
 Step A — Net Odds:
     b = (1 - price) / price
 
-Step B — Real Probability (with consensus boosts):
-    p = price
-    if wallet_count ≥ 3:  p += 0.05    → Consensus boost
-    if alpha_score ≥ 70:  p += 0.05    → Alpha boost
-    p = min(p, 0.85)                    → Hard cap
+Step B — Probability Calibration (The "De-Biasing" Step):
+    p_market = price
+    
+    # 1. Apply FLB Correction (if enabled in settings)
+    # Adjusts for retail irrationality at extremes
+    p_real = apply_flb_correction(p_market, mode="STANDARD")
+    
+    # 2. Apply Optimism Tax (if enabled in settings)
+    # Penalties for Sports/Politics due to fan bias
+    if category in ["Sports", "Politics"]:
+        p_real = p_real * 0.95  # -5% penalty
 
-Step C — Kelly Fraction:
-    q = 1 - p
-    f = (p × b - q) / b
+Step C — Real Probability (with consensus boosts):
+    # Reward elite consensus and high alpha scores
+    if wallet_count ≥ 3:  p_real += 0.05
+    if alpha_score ≥ 70:  p_real += 0.05
+    
+    p_final = min(p_real, 0.85)  # Hard cap
 
-Step D — Final Sizing:
+Step D — Kelly Fraction:
+    q = 1 - p_final
+    f = (p_final * b - q) / b
+
+Step E — Final Sizing:
     if f ≤ 0 → $0 (Negative EV, do not bet)
     stake_pct = f × kelly_multiplier
     final_pct = min(stake_pct, max_risk_cap)
