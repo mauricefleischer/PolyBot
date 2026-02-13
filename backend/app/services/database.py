@@ -131,17 +131,10 @@ class DatabaseService:
                 except sqlite3.OperationalError:
                     pass  # Column already exists
             
-            # Migrate: add whale stats columns
-            for col_sql in [
-                "ALTER TABLE whale_scores ADD COLUMN win_rate REAL DEFAULT 0.0",
-                "ALTER TABLE whale_scores ADD COLUMN roi_perf REAL DEFAULT 0.0",
-            ]:
-                try:
-                    cursor.execute(col_sql)
                 except sqlite3.OperationalError:
                     pass
-            
-            # Whale scores table
+
+            # Ensure whale_scores table exists first
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS whale_scores (
                     address TEXT PRIMARY KEY,
@@ -154,9 +147,24 @@ class DatabaseService:
                     tags TEXT DEFAULT '[]',
                     trade_count INTEGER DEFAULT 0,
                     details TEXT DEFAULT '{}',
+                    win_rate REAL DEFAULT 0.0,
+                    roi_perf REAL DEFAULT 0.0,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Migrate: add whale stats columns to existing table if needed
+            for col_sql in [
+                "ALTER TABLE whale_scores ADD COLUMN win_rate REAL DEFAULT 0.0",
+                "ALTER TABLE whale_scores ADD COLUMN roi_perf REAL DEFAULT 0.0",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
+            
+            # Whale scores table
+
     
     # =========================================================================
     # Wallet Operations
