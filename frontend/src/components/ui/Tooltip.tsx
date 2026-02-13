@@ -205,6 +205,61 @@ export function WhaleTooltipContent({ meta }: WhaleTooltipContentProps) {
     );
 }
 
+interface WhaleScoreTooltipProps {
+    score: {
+        roi_score: number;
+        precision_score: number;
+        discipline_score: number;
+        timing_score: number;
+        total_score: number;
+        trade_count: number;
+        tier: string;
+    };
+}
+
+export function WhaleScoreTooltip({ score }: WhaleScoreTooltipProps) {
+    return (
+        <div className="space-y-2 min-w-[200px]">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-1">
+                <span className="font-bold text-slate-200">Whale Score</span>
+                <span className={`font-mono font-bold ${score.tier === 'ELITE' ? 'text-purple-400' :
+                        score.tier === 'PRO' ? 'text-emerald-400' :
+                            score.tier === 'WEAK' ? 'text-rose-400' : 'text-slate-400'
+                    }`}>
+                    {score.total_score} ({score.tier})
+                </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-slate-300">
+                <span>ROI Score</span>
+                <span className={`text-right ${score.roi_score >= 80 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                    {score.roi_score}
+                </span>
+
+                <span>Precision</span>
+                <span className={`text-right ${score.precision_score >= 80 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                    {score.precision_score}
+                </span>
+
+                <span>Discipline</span>
+                <span className={`text-right ${score.discipline_score >= 80 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                    {score.discipline_score}
+                </span>
+
+                <span>Timing</span>
+                <span className={`text-right ${score.timing_score >= 80 ? 'text-emerald-400' : 'text-slate-200'}`}>
+                    {score.timing_score}
+                </span>
+
+                <div className="col-span-2 pt-1 mt-1 border-t border-slate-700 flex justify-between items-center text-slate-400">
+                    <span>Analyzed Trades</span>
+                    <span className="text-slate-200 font-mono">{score.trade_count}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 interface KellyTooltipContentProps {
     size: number;
     breakdown: {

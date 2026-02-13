@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Trash2, Plus, AlertCircle, Check } from 'lucide-react';
 import { useWallets, useWhaleScores, useWalletConfig } from '../../hooks/useSignals';
-import { WhaleTooltipContent } from '../ui/Tooltip';
-import { Tooltip } from '../ui/Tooltip';
+import { Tooltip, WhaleScoreTooltip } from '../ui/Tooltip';
 
 export function WhaleManager() {
     const { data: walletsData, isLoading: walletsLoading } = useWallets();
@@ -137,12 +136,7 @@ export function WhaleManager() {
                                 <td className="px-6 py-3">
                                     {wallet.score ? (
                                         <Tooltip
-                                            content={<WhaleTooltipContent meta={{
-                                                avg_score: wallet.score.total_score,
-                                                has_elite: wallet.score.tier === 'ELITE',
-                                                has_bagholder: wallet.score.tier === 'WEAK',
-                                                wallet_tiers: { [wallet.address]: wallet.score.tier }
-                                            }} />}
+                                            content={<WhaleScoreTooltip score={wallet.score} />}
                                             position="top"
                                         >
                                             <div className="cursor-help inline-flex items-center gap-2">
