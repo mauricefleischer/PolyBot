@@ -13,13 +13,14 @@
 5. [Universal Netting](#5-universal-netting)
 6. [Signal Aggregation](#6-signal-aggregation)
 7. [Alpha Score 2.0](#7-alpha-score-20)
-8. [Fractional Kelly Criterion](#8-fractional-kelly-criterion)
-9. [Portfolio Validation](#9-portfolio-validation)
-10. [Market Classification](#10-market-classification)
-11. [Signal Ranking](#11-signal-ranking)
-12. [API Reference](#12-api-reference)
-13. [Frontend Architecture](#13-frontend-architecture)
-14. [Configuration & Parameters](#14-configuration--parameters)
+8. [Yield Mode Strategy](#8-yield-mode-strategy)
+9. [Fractional Kelly Criterion](#9-fractional-kelly-criterion)
+10. [Portfolio Validation](#10-portfolio-validation)
+11. [Market Classification](#11-market-classification)
+12. [Signal Ranking](#12-signal-ranking)
+13. [API Reference](#13-api-reference)
+14. [Frontend Architecture](#14-frontend-architecture)
+15. [Configuration & Parameters](#15-configuration--parameters)
 
 ---
 
@@ -93,23 +94,29 @@ PolyBot/
 ```mermaid
 graph LR
     A[Tracked Wallets] --> B[Data API: Positions]
+    A --> B2[Data API: Activity]
     B --> C[Universal Netting]
+    B2 --> C
     C --> D[Signal Aggregation]
     D --> E[CLOB API: 7d Price History]
     E --> F["Alpha Score 2.0"]
-    F --> G[Kelly Criterion Sizing]
-    G --> H[Ranked Signals → API]
+    F --> G{Strategy Check}
+    G -->|Price ≥ Trigger| H[Yield Mode (Fixed Size)]
+    G -->|Price < Trigger| I[Kelly Criterion Sizing]
+    H --> J[Ranked Signals → API]
+    I --> J
 ```
 
 **Flow per request cycle:**
 
-1. For each tracked whale wallet, fetch all active positions from the Polymarket Data API.
-2. Apply universal netting to remove hedged positions within each wallet.
-3. Group remaining positions across wallets by `(market_id, outcome_label, direction)`.
-4. Fetch 7-day price history from the CLOB API for momentum scoring.
-5. Calculate Alpha Score 2.0 (4-factor model) for each aggregated signal.
-6. Calculate recommended position size via Fractional Kelly Criterion.
-7. Sort by wallet count → alpha score → total conviction and return.
+1. For each tracked whale wallet, **concurrently** fetch active positions and trade activity from the Data API.
+2. Map earliest trade timestamp per asset from activity data to each position (for Freshness scoring).
+3. Apply universal netting to remove hedged positions within each wallet.
+4. Group remaining positions across wallets by `(market_id, outcome_label, direction)`.
+5. Fetch 7-day price history from the CLOB API for momentum scoring.
+6. Calculate Alpha Score 2.0 (4-factor model) for each aggregated signal.
+7. Calculate recommended position size via Fractional Kelly Criterion.
+8. Sort by wallet count → alpha score → total conviction and return.
 
 ---
 
@@ -121,7 +128,7 @@ PolyBot integrates **three** of Polymarket's four APIs:
 |-----|----------|-------------------|
 | **Gamma API** | `https://gamma-api.polymarket.com` | Market discovery, metadata, categories, slugs |
 | **CLOB API** | `https://clob.polymarket.com` | 7-day price history for momentum scoring |
-| **Data API** | `https://data-api.polymarket.com` | Wallet positions (the primary data source) |
+| **Data API** | `https://data-api.polymarket.com` | Wallet positions (`/positions`) and trade history with timestamps (`/activity`) |
 
 ### CLOB API – Price History Endpoint
 
@@ -310,8 +317,19 @@ The bonus is sector-weighted because some categories have stronger sentiment bia
 
 **Purpose:** Recent positions have higher predictive power than stale ones. A position opened today is more informative than one opened two weeks ago.
 
+**Data Source:** Data API `/activity` endpoint. For each tracked wallet, the trade history is fetched and the **earliest trade timestamp per asset** is used as the position open time.
+
 ```
-days_since_entry = (now - earliest_timestamp) / 86400
+GET https://data-api.polymarket.com/activity
+    ?user={wallet_address}
+    &limit=500
+
+→ Returns list of trades with Unix `timestamp`, `asset`, `conditionId`, `side`, etc.
+→ We extract: min(timestamp) per asset → position open time.
+```
+
+```
+days_since_entry = (now - earliest_trade_timestamp) / 86400
 freshness = max(0, floor(10 - 2 × days_since_entry))
 ```
 
@@ -324,7 +342,7 @@ freshness = max(0, floor(10 - 2 × days_since_entry))
 | 4 days | **+2** | Aging |
 | ≥ 5 days | **0** | Stale |
 
-If no timestamp data is available (API doesn't return `createdAt`), freshness defaults to 0.
+If activity data is unavailable (new wallet, API error), freshness defaults to 0.
 
 ---
 
@@ -351,7 +369,35 @@ Total = clamp(0, 100, 50 + 0 + 10 + 0 + 10) = 70 → ALPHA
 
 ---
 
-## 8. Fractional Kelly Criterion
+## 8. Yield Mode Strategy
+
+**New in v2.1:** A specialized strategy for high-probability "safe parking" or arbitrage opportunities where the market is near certainty (e.g., >85¢). In these scenarios, the Kelly Criterion is often too aggressive or volatile, so PolyBot switches to a fixed-allocation model.
+
+### Logic
+The Yield Mode overrides the Kelly Speculation engine when **both** conditions are met:
+
+1.  **Price Threshold:** `current_price ≥ yield_trigger_price` (default: $0.85)
+2.  **Consensus Threshold:** `wallet_count ≥ yield_min_whales` (default: 3)
+
+### Mechanism
+Instead of calculating edge and KELLY fractions, the system allocates a **fixed percentage** of the bankroll.
+
+```python
+if price >= yield_trigger_price and count >= yield_min_whales:
+    size = user_balance * yield_fixed_pct
+    reason = "Yield Mode (Safe Parking)"
+```
+
+### Parameters
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `yield_trigger_price` | 0.85 | Price above which Yield Mode activates (85¢) |
+| `yield_fixed_pct` | 0.10 | Fixed bankroll % to potential allocate (10%) |
+| `yield_min_whales` | 3 | Minimum smart money confirmation required |
+
+---
+
+## 9. Fractional Kelly Criterion
 
 The Kelly Criterion calculates the **mathematically optimal bet size** to maximize long-term growth of a bankroll, given an estimate of edge.
 
@@ -420,7 +466,7 @@ recommended = $10,000 × 0.05 = $500
 
 ---
 
-## 9. Portfolio Validation
+## 10. Portfolio Validation
 
 When a user connects their wallet, PolyBot compares their positions against whale consensus and assigns a status label.
 
@@ -453,7 +499,7 @@ position_pnl_usdc = size_usdc × (pnl_percent / 100)
 
 ---
 
-## 10. Market Classification
+## 11. Market Classification
 
 Markets are categorized by matching Gamma API tags against keyword lists:
 
@@ -469,7 +515,7 @@ Categories affect the **Smart Short** sub-factor of Alpha Score 2.0 (see Section
 
 ---
 
-## 11. Signal Ranking
+## 12. Signal Ranking
 
 Final signals are sorted by a **three-tier priority:**
 
@@ -491,7 +537,7 @@ ORDER BY
 
 ---
 
-## 12. API Reference
+## 13. API Reference
 
 All endpoints are prefixed with `/api/v1`.
 
@@ -512,6 +558,9 @@ All endpoints are prefixed with `/api/v1`.
 | `hide_lottery` | bool | false | Hide Alpha < 30 |
 | `longshot_tolerance` | float | 1.0 | FLB penalty scaling (0.5–1.5) |
 | `trend_mode` | bool | true | Enable momentum scoring |
+| `yield_trigger_price` | float | 0.85 | Yield Mode activation price |
+| `yield_fixed_pct` | float | 0.10 | Yield Mode fixed size |
+| `yield_min_whales` | int | 3 | Yield Mode min consensus |
 
 ### Portfolio
 
@@ -529,13 +578,13 @@ All endpoints are prefixed with `/api/v1`.
 | `PUT` | `/config/wallet-name` | Set display name for a wallet |
 
 ### Settings
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/settings` | Get current settings |
-| `PUT` | `/settings` | Update settings (partial update) |
-
-Settings persist to SQLite and include: `kelly_multiplier`, `max_risk_cap`, `min_wallets`, `hide_lottery`, `connected_wallet`, `longshot_tolerance`, `trend_mode`.
+ 
+ | Method | Endpoint | Description |
+ |--------|----------|-------------|
+ | `GET` | `/settings` | Get current settings |
+ | `PUT` | `/settings` | Update settings (partial update) |
+ 
+ Settings persist to SQLite and include: `kelly_multiplier`, `max_risk_cap`, `min_wallets`, `hide_lottery`, `connected_wallet`, `longshot_tolerance`, `trend_mode`, `yield_trigger_price`, `yield_fixed_pct`, `yield_min_whales`.
 
 ### Health
 
@@ -546,14 +595,21 @@ Settings persist to SQLite and include: `kelly_multiplier`, `max_risk_cap`, `min
 
 ---
 
-## 13. Frontend Architecture
+## 14. Frontend Architecture
 
 | Component | File | Purpose |
 |-----------|------|---------|
 | **App** | `App.tsx` | Root layout, tab navigation |
 | **SignalsTable** | `terminal/SignalsTable.tsx` | Main data table with TanStack Table |
 | **SettingsTab** | `terminal/SettingsTab.tsx` | Risk config, wallet management |
-| **Tooltip** | `ui/Tooltip.tsx` | Alpha breakdown + Kelly breakdown tooltips |
+| **Tooltip** | `ui/Tooltip.tsx` | Alpha/Kelly/Yield breakdown tooltips |
+
+### Performance Optimization
+**Debounced Settings:** The `SettingsTab` uses a local state buffer to provide **immediate visual feedback** while dragging sliders, but debounces the API write by **500ms**. This prevents flooding the backend with hundreds of requests during a single interaction.
+
+### UI / UX Visuals
+-   **Consensus Column:** Displays a heatmap bar that glows **purple** (Elite status) when high-tier whales are present.
+-   **Yield Mode:** Displays a specialized "Yield Active" tooltip with fixed allocation details instead of Kelly math.
 
 ### Hooks
 
@@ -572,7 +628,7 @@ Settings persist to SQLite and include: `kelly_multiplier`, `max_risk_cap`, `min
 
 ---
 
-## 14. Configuration & Parameters
+## 15. Configuration & Parameters
 
 ### Environment Variables (`.env`)
 
@@ -595,6 +651,9 @@ Settings persist to SQLite and include: `kelly_multiplier`, `max_risk_cap`, `min
 | Min Wallets | 2 | 1–10 | Settings UI / API |
 | Longshot Tolerance | 1.0 | 0.5–1.5 | Settings UI / API |
 | Trend Mode | true | on/off | Settings UI / API |
+| Yield Trigger | 0.85 | 0.50–0.99 | Settings UI / API |
+| Yield Fixed % | 10% | 1%–50% | Settings UI / API |
+| Yield Min Whales | 3 | 1–5 | Settings UI / API |
 | Probability Cap | 0.85 | — | Hardcoded in aggregator |
 | Consensus Boost | +0.05 | — | Hardcoded in Kelly |
 | Alpha Boost | +0.05 | — | Hardcoded in Kelly |

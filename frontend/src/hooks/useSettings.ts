@@ -14,6 +14,13 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     connectedWallet: undefined,
     longshotTolerance: 1.0,
     trendMode: true,
+    flbCorrectionMode: 'STANDARD',
+    optimismTax: true,
+    minWhaleTier: 'ALL',
+    ignoreBagholders: true,
+    yieldTriggerPrice: 0.85,
+    yieldFixedPct: 0.10,
+    yieldMinWhales: 3,
 };
 
 interface ServerSettings {
@@ -24,6 +31,13 @@ interface ServerSettings {
     connected_wallet: string | null;
     longshot_tolerance: number;
     trend_mode: boolean;
+    flb_correction_mode: 'AGGRESSIVE' | 'STANDARD' | 'OFF';
+    optimism_tax: boolean;
+    min_whale_tier: 'ALL' | 'PRO' | 'ELITE';
+    ignore_bagholders: boolean;
+    yield_trigger_price: number;
+    yield_fixed_pct: number;
+    yield_min_whales: number;
 }
 
 // Convert server format to frontend format
@@ -36,6 +50,13 @@ function fromServer(server: ServerSettings): RiskSettings {
         connectedWallet: server.connected_wallet || undefined,
         longshotTolerance: server.longshot_tolerance ?? 1.0,
         trendMode: server.trend_mode ?? true,
+        flbCorrectionMode: server.flb_correction_mode ?? 'STANDARD',
+        optimismTax: server.optimism_tax ?? true,
+        minWhaleTier: server.min_whale_tier ?? 'ALL',
+        ignoreBagholders: server.ignore_bagholders ?? true,
+        yieldTriggerPrice: server.yield_trigger_price ?? 0.85,
+        yieldFixedPct: server.yield_fixed_pct ?? 0.10,
+        yieldMinWhales: server.yield_min_whales ?? 3,
     };
 }
 
@@ -49,6 +70,13 @@ function toServer(settings: Partial<RiskSettings>): Partial<ServerSettings> {
     if (settings.connectedWallet !== undefined) result.connected_wallet = settings.connectedWallet;
     if (settings.longshotTolerance !== undefined) result.longshot_tolerance = settings.longshotTolerance;
     if (settings.trendMode !== undefined) result.trend_mode = settings.trendMode;
+    if (settings.flbCorrectionMode !== undefined) result.flb_correction_mode = settings.flbCorrectionMode;
+    if (settings.optimismTax !== undefined) result.optimism_tax = settings.optimismTax;
+    if (settings.minWhaleTier !== undefined) result.min_whale_tier = settings.minWhaleTier;
+    if (settings.ignoreBagholders !== undefined) result.ignore_bagholders = settings.ignoreBagholders;
+    if (settings.yieldTriggerPrice !== undefined) result.yield_trigger_price = settings.yieldTriggerPrice;
+    if (settings.yieldFixedPct !== undefined) result.yield_fixed_pct = settings.yieldFixedPct;
+    if (settings.yieldMinWhales !== undefined) result.yield_min_whales = settings.yieldMinWhales;
     return result;
 }
 
@@ -87,8 +115,32 @@ export function useSettings() {
 
     const mutation = useMutation({
         mutationFn: updateSettings,
-        onSuccess: (newSettings) => {
-            queryClient.setQueryData(['settings'], newSettings);
+        onMutate: async (newSettingsPartial) => {
+            // Cancel any outgoing refetches
+            await queryClient.cancelQueries({ queryKey: ['settings'] });
+
+            // Snapshot the previous value
+            const previousSettings = queryClient.getQueryData<RiskSettings>(['settings']);
+
+            // Optimistically update to the new value
+            if (previousSettings) {
+                queryClient.setQueryData<RiskSettings>(['settings'], {
+                    ...previousSettings,
+                    ...newSettingsPartial,
+                });
+            }
+
+            return { previousSettings };
+        },
+        onError: (_err, _newSettings, context) => {
+            // Rollback on error
+            if (context?.previousSettings) {
+                queryClient.setQueryData(['settings'], context.previousSettings);
+            }
+        },
+        onSettled: () => {
+            // Always refetch after error or success to ensure sync
+            queryClient.invalidateQueries({ queryKey: ['settings'] });
         },
     });
 

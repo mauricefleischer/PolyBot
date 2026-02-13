@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-table';
 import { ArrowUpDown } from 'lucide-react';
 import type { Signal } from '../../types/api';
-import { Tooltip, AlphaTooltipContent, KellyTooltipContent } from '../ui/Tooltip';
+import { Tooltip, AlphaTooltipContent, KellyTooltipContent, WhaleTooltipContent } from '../ui/Tooltip';
 import {
     cn,
     formatCurrency,
@@ -41,17 +41,42 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
                 ),
                 accessorKey: 'wallet_count',
                 cell: ({ row }) => {
-                    const walletCount = row.original.wallet_count;
-                    const heatmapClass = getHeatmapClass(walletCount);
+                    const consensus = row.original.consensus;
+                    const walletCount = consensus.count;
+
+                    // Use standard heatmap, but override with purple if Elite consensus is present
+                    const baseHeatmapClass = getHeatmapClass(walletCount);
+                    const barClass = consensus.has_elite
+                        ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
+                        : baseHeatmapClass;
+
+                    // Construct meta for tooltip compatibility
+                    const tooltipMeta = {
+                        avg_score: consensus.weighted_score,
+                        has_elite: consensus.has_elite,
+                        has_bagholder: false,
+                        wallet_tiers: consensus.contributors.reduce((acc, c) => ({
+                            ...acc,
+                            [c.address]: c.tier
+                        }), {} as Record<string, string>)
+                    };
 
                     return (
-                        <div className="relative pl-3">
-                            <div className={cn('heatmap-bar', heatmapClass)} />
-                            <div className="text-slate-900 font-bold text-xl tabular-nums">
-                                {walletCount}
+                        <Tooltip
+                            content={<WhaleTooltipContent meta={tooltipMeta} />}
+                            position="right"
+                        >
+                            <div className="relative pl-3 cursor-help">
+                                <div className={cn('heatmap-bar', barClass)} />
+                                <div className={cn(
+                                    "text-xl tabular-nums flex items-center gap-1.5 font-bold",
+                                    consensus.has_elite ? "text-purple-400" : "text-slate-900"
+                                )}>
+                                    {walletCount}
+                                </div>
+                                <div className="text-slate-500 text-xs">Wallets</div>
                             </div>
-                            <div className="text-slate-500 text-xs">Wallets</div>
-                        </div>
+                        </Tooltip>
                     );
                 },
             },

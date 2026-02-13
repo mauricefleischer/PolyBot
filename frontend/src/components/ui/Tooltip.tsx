@@ -23,6 +23,10 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
                 let top = 0;
                 let left = 0;
 
+                // Adjust positioning to avoid edge overflow
+                const tooltipWidth = 250; // Approximated
+                const viewportWidth = window.innerWidth;
+
                 switch (position) {
                     case 'top':
                         top = rect.top + scrollTop - 8;
@@ -42,10 +46,15 @@ export function Tooltip({ content, children, position = 'top' }: TooltipProps) {
                         break;
                 }
 
+                // Simple edge detection for right side
+                if (left + tooltipWidth / 2 > viewportWidth) {
+                    left = viewportWidth - tooltipWidth / 2 - 20;
+                }
+
                 setCoords({ top, left });
             }
             setIsVisible(true);
-        }, 300);
+        }, 100); // Faster hover
     };
 
     const hideTooltip = () => {
@@ -152,42 +161,144 @@ export function AlphaTooltipContent({ score, breakdown }: AlphaTooltipContentPro
     );
 }
 
+interface WhaleTooltipContentProps {
+    meta: {
+        avg_score: number;
+        has_elite: boolean;
+        has_bagholder: boolean;
+        wallet_tiers: Record<string, string>;
+    };
+}
+
+export function WhaleTooltipContent({ meta }: WhaleTooltipContentProps) {
+    const sortedTiers = Object.entries(meta.wallet_tiers).sort(([, a], [, b]) => {
+        const tierOrder = { ELITE: 4, PRO: 3, STD: 2, WEAK: 1, UNRATED: 0 };
+        return (tierOrder[b as keyof typeof tierOrder] || 0) - (tierOrder[a as keyof typeof tierOrder] || 0);
+    });
+
+    return (
+        <div className="space-y-1.5 min-w-[200px]">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-1">
+                <span className="font-bold text-slate-200">Consensus Quality</span>
+                <span className={`font-mono font-bold ${meta.avg_score >= 80 ? 'text-purple-400' :
+                    meta.avg_score >= 60 ? 'text-emerald-400' :
+                        'text-amber-400'
+                    }`}>
+                    Avg: {meta.avg_score}
+                </span>
+            </div>
+            <div className="space-y-1">
+                {sortedTiers.map(([wallet, tier]) => (
+                    <div key={wallet} className="flex items-center justify-between text-[10px] font-mono">
+                        <span className="text-slate-400">{wallet}</span>
+                        <span className={
+                            tier === 'ELITE' ? 'text-purple-400 font-bold' :
+                                tier === 'PRO' ? 'text-emerald-400' :
+                                    tier === 'WEAK' ? 'text-rose-400' : 'text-slate-500'
+                        }>
+                            {tier}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 interface KellyTooltipContentProps {
     size: number;
     breakdown: {
         net_odds?: number;
         real_prob?: number;
+        prob_boosts?: string[];
         kelly_multiplier?: number;
         capped_percent?: number;
         reason?: string;
+        kelly_raw?: number;
+        strategy?: string;
+        yield_trigger?: number;
+        fixed_pct?: number;
+        final_pct?: number;
     };
 }
 
 export function KellyTooltipContent({ size, breakdown }: KellyTooltipContentProps) {
+    // Yield Mode Display
+    if (breakdown.strategy === 'YIELD_MODE') {
+        return (
+            <div className="space-y-1.5 min-w-[220px]">
+                <div className="flex items-center justify-between border-b border-emerald-900/50 pb-1">
+                    <span className="font-bold text-emerald-400">Yield Mode Active</span>
+                    <span className="text-[10px] text-emerald-600 font-mono">FIXED SIZE</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-300">
+                    <span>Trigger Price</span>
+                    <span className="text-right text-slate-200">${(breakdown.yield_trigger || 0).toFixed(2)}</span>
+
+                    <span>Fixed Allocation</span>
+                    <span className="text-right text-emerald-400">{((breakdown.fixed_pct || 0) * 100).toFixed(1)}%</span>
+
+                    <div className="col-span-2 pt-1 text-[9px] text-slate-500 italic text-center">
+                        Price &gt; Trigger • Whale Consensus Met
+                    </div>
+
+                    <span className="pt-2 mt-1 border-t border-slate-800 font-bold text-slate-200">Recommended</span>
+                    <span className="pt-2 mt-1 border-t border-slate-800 font-bold text-right text-emerald-400 text-base">
+                        ${size.toLocaleString()}
+                    </span>
+                </div>
+            </div>
+        );
+    }
+
     const kellyName = breakdown.kelly_multiplier === 0.1
         ? 'Conservative'
         : breakdown.kelly_multiplier === 0.5
             ? 'Aggressive'
             : 'Quarter Kelly';
 
-    if (breakdown.reason === 'Negative EV') {
+    if (breakdown.reason === 'Negative EV' || size === 0) {
         return (
-            <div className="text-amber-400">
-                No bet recommended (Negative Expected Value)
+            <div className="text-amber-400 min-w-[200px]">
+                <div className="font-bold border-b border-amber-900/50 pb-1 mb-1">No Bet Recommended</div>
+                <div className="text-[10px] text-slate-300">
+                    Reason: {breakdown.reason || 'Risk limit reached'}
+                </div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-1">
-            <div className="font-semibold text-blue-400">${size} Recommended</div>
-            <div className="text-slate-300 text-[10px] space-y-0.5">
-                <div>Odds: {breakdown.net_odds}:1</div>
-                <div>Est. Prob: {((breakdown.real_prob || 0) * 100).toFixed(0)}%</div>
-                <div>Strategy: {kellyName}</div>
-                {breakdown.capped_percent && (
-                    <div>Risk: {(breakdown.capped_percent * 100).toFixed(1)}%</div>
+        <div className="space-y-1.5 min-w-[220px]">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-1">
+                <span className="font-bold text-blue-400">${size} Recommended</span>
+                <span className="text-[10px] text-slate-400">{kellyName}</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-300">
+                <span>Net Odds</span>
+                <span className="text-right text-slate-200">{breakdown.net_odds}:1</span>
+
+                <span>Real Prob</span>
+                <span className="text-right text-emerald-400">
+                    {((breakdown.real_prob || 0) * 100).toFixed(1)}%
+                </span>
+
+                {breakdown.prob_boosts && breakdown.prob_boosts.length > 0 && (
+                    <div className="col-span-2 text-[9px] text-emerald-500/80 italic text-right">
+                        {breakdown.prob_boosts.join(', ')}
+                    </div>
                 )}
+
+                <span className="pt-1 mt-1 border-t border-slate-800 text-slate-400">Kelly Raw</span>
+                <span className="pt-1 mt-1 border-t border-slate-800 text-right">
+                    {((breakdown.kelly_raw || 0) * 100).toFixed(1)}%
+                </span>
+
+                <span className="font-bold text-slate-200">Final Risk</span>
+                <span className="font-bold text-right text-blue-400">
+                    {((breakdown.capped_percent || 0) * 100).toFixed(1)}%
+                </span>
             </div>
         </div>
     );

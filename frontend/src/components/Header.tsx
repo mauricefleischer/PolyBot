@@ -2,7 +2,7 @@ import { Wallet, Activity, TrendingUp, RefreshCw } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
 
 interface HeaderProps {
-    usdcBalance: number;
+    usdcBalance?: number | null;
     walletCount: number;
     signalCount: number;
     isRefreshing?: boolean;
@@ -40,7 +40,7 @@ export function Header({
                         <Wallet className="w-4 h-4 text-slate-500" />
                         <span className="text-slate-500 text-sm">Available:</span>
                         <span className="text-slate-900 text-xl font-bold tabular-nums">
-                            {formatCurrency(usdcBalance)}
+                            {usdcBalance != null ? formatCurrency(usdcBalance) : '—'}
                         </span>
                     </div>
 

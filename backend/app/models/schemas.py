@@ -15,6 +15,9 @@ class ScoringConfig:
     """User-tunable scoring parameters for Alpha Score 2.0."""
     longshot_tolerance: float = 1.0   # 0.5 (lenient) to 1.5 (strict)
     trend_mode: bool = True           # Enable/disable momentum scoring
+    yield_trigger_price: float = 0.85 # Price above which "Yield Mode" activates
+    yield_fixed_pct: float = 0.10     # Fixed portfolio % for Yield Mode trades
+    yield_min_whales: int = 3         # Min whales required for Yield Mode
 
 
 @dataclass
@@ -61,6 +64,43 @@ class RawSignal:
     timestamp: Optional[datetime] = None  # Position creation time for freshness
 
 
+class ConsensusContributor(BaseModel):
+    """Simplified whale info for the dashboard popover."""
+    address: str
+    score: int
+    tier: str
+
+
+class SignalConsensus(BaseModel):
+    """Structured consensus data for the signal."""
+    count: int = Field(ge=0)
+    has_elite: bool = False
+    weighted_score: int = 0
+    contributors: List[ConsensusContributor] = []
+
+
+class WhaleMeta(BaseModel):
+    """Whale quality summary for a consensus signal."""
+    avg_score: int = Field(default=50, description="Average Smart Money Score of wallets in consensus")
+    has_elite: bool = Field(default=False, description="At least one ELITE tier wallet")
+    has_bagholder: bool = Field(default=False, description="At least one WEAK tier wallet")
+    wallet_tiers: Dict[str, str] = Field(default={}, description="Wallet address → tier mapping")
+
+
+class WhaleScoreSchema(BaseModel):
+    """API response for a wallet's Smart Money Score."""
+    address: str
+    total_score: int = Field(ge=0, le=100)
+    roi_score: int = Field(ge=0, le=100)
+    discipline_score: int = Field(ge=0, le=100)
+    precision_score: int = Field(ge=0, le=100)
+    timing_score: int = Field(ge=0, le=100)
+    tier: str = Field(description="ELITE, PRO, STD, WEAK, or UNRATED")
+    tags: List[str] = Field(default=[], description="Attribute tags: HLD, PRC, CHRN, etc.")
+    trade_count: int = Field(ge=0)
+    details: Dict[str, str] = Field(default={})
+
+
 class SignalSchema(BaseModel):
     """
     API response schema for aggregated consensus signals.
@@ -77,7 +117,7 @@ class SignalSchema(BaseModel):
     direction: str = Field(description="YES or NO")
     category: str = Field(description="Market category")
     
-    # Consensus Metrics
+    # Consensus Metrics (Top-level deprecated, moving to 'consensus' object but kept for compat)
     wallet_count: int = Field(ge=0, description="Number of wallets in consensus")
     total_conviction: float = Field(ge=0, description="Total USDC invested")
     
@@ -92,6 +132,10 @@ class SignalSchema(BaseModel):
     # Risk Sizing (calculated for default user)
     recommended_size: float = Field(ge=0, description="Recommended position size in USDC")
     kelly_breakdown: dict = Field(default={}, description="Kelly calculation breakdown for tooltip")
+    
+    # Whale Quality & Consensus
+    consensus: SignalConsensus = Field(description="Structured consensus data for dashboard")
+    whale_meta: Optional[dict] = Field(default=None, description="DEPRECATED: Use 'consensus' object instead")
 
 
 class PortfolioPositionSchema(BaseModel):

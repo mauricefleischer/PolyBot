@@ -238,6 +238,62 @@ class GammaAPIClient:
         await self.fetch_markets(limit=100, active=True, closed=False)
 
     # =========================================================================
+    # Data API – Trade Activity (for Freshness Scoring)
+    # =========================================================================
+
+    async def fetch_activity(
+        self, wallet_address: str, limit: int = 500
+    ) -> list[dict]:
+        """
+        Fetch trade activity for a wallet from the Data API.
+        Returns list of trades with timestamps.
+        """
+        cache_key = f"activity_{wallet_address.lower()}"
+
+        if cache_key in self._market_cache:
+            return self._market_cache[cache_key]
+
+        data_api_url = "https://data-api.polymarket.com/activity"
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(
+                    data_api_url,
+                    params={
+                        "user": wallet_address.lower(),
+                        "limit": str(limit),
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+                self._market_cache[cache_key] = result
+                return result
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                print(f"Activity fetch error for {wallet_address[:10]}...: {e}")
+                return []
+
+    async def fetch_earliest_trades(
+        self, wallet_address: str
+    ) -> Dict[str, int]:
+        """
+        Get the earliest trade timestamp per asset for a wallet.
+
+        Returns:
+            Dict mapping asset (token_id) -> earliest Unix timestamp.
+        """
+        trades = await self.fetch_activity(wallet_address, limit=500)
+
+        earliest: Dict[str, int] = {}
+        for trade in trades:
+            asset = trade.get("asset", "")
+            ts = trade.get("timestamp", 0)
+            if asset and ts:
+                if asset not in earliest or ts < earliest[asset]:
+                    earliest[asset] = ts
+
+        return earliest
+
+    # =========================================================================
     # CLOB API – Price History (for Momentum Scoring)
     # =========================================================================
     

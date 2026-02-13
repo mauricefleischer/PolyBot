@@ -1,36 +1,7 @@
-import { useState } from 'react';
-import { Plus, Trash2, Wallet, AlertCircle, Check, X, Sliders } from 'lucide-react';
-import { useWallets, useWalletMutation } from '../../hooks/useSignals';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Wallet, Sliders, Check, AlertCircle } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import type { RiskSettings } from '../../types/api';
-
-interface WalletEntry {
-    address: string;
-    name: string;
-}
-
-// Local storage helper for wallet names
-const WALLET_NAMES_KEY = 'consensus_terminal_wallet_names';
-
-function getWalletNames(): Record<string, string> {
-    try {
-        const stored = localStorage.getItem(WALLET_NAMES_KEY);
-        return stored ? JSON.parse(stored) : {};
-    } catch {
-        return {};
-    }
-}
-
-function saveWalletName(address: string, name: string) {
-    const names = getWalletNames();
-    names[address.toLowerCase()] = name;
-    localStorage.setItem(WALLET_NAMES_KEY, JSON.stringify(names));
-}
-
-function removeWalletName(address: string) {
-    const names = getWalletNames();
-    delete names[address.toLowerCase()];
-    localStorage.setItem(WALLET_NAMES_KEY, JSON.stringify(names));
-}
 
 const KELLY_OPTIONS = [
     { value: 0.1, label: 'Conservative (0.1x)' },
@@ -53,61 +24,30 @@ export function SettingsTab({
     riskSettings,
     onRiskSettingsChange
 }: SettingsTabProps) {
-    const { data: walletsData, isLoading } = useWallets();
-    const walletMutation = useWalletMutation();
-
-    const [newAddress, setNewAddress] = useState('');
-    const [newName, setNewName] = useState('');
     const [connectAddress, setConnectAddress] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
-    const walletNames = getWalletNames();
+    // Local state for immediate UI updates
+    const [localSettings, setLocalSettings] = useState<RiskSettings>(riskSettings);
 
-    const wallets: WalletEntry[] = (walletsData?.wallets || []).map(addr => ({
-        address: addr,
-        name: walletNames[addr.toLowerCase()] || '',
-    }));
+    // Sync local state when props change (e.g. initial load)
+    useEffect(() => {
+        setLocalSettings(riskSettings);
+    }, [riskSettings]);
 
-    const handleAddWallet = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError(null);
-        setSuccess(null);
+    // Debounced save function
+    const debouncedSaveRef = useRef<ReturnType<typeof setTimeout>>();
 
-        if (!newAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-            setError('Invalid wallet address format');
-            return;
+    const saveSettings = useCallback((newSettings: RiskSettings) => {
+        if (debouncedSaveRef.current) {
+            clearTimeout(debouncedSaveRef.current);
         }
 
-        try {
-            await walletMutation.mutateAsync({
-                action: 'add',
-                address: newAddress,
-            });
-
-            if (newName.trim()) {
-                saveWalletName(newAddress, newName.trim());
-            }
-
-            setSuccess(`Wallet added: ${newName || newAddress.slice(0, 10)}...`);
-            setNewAddress('');
-            setNewName('');
-        } catch {
-            setError('Failed to add wallet');
-        }
-    };
-
-    const handleRemoveWallet = async (address: string) => {
-        try {
-            await walletMutation.mutateAsync({
-                action: 'remove',
-                address,
-            });
-            removeWalletName(address);
-        } catch {
-            setError('Failed to remove wallet');
-        }
-    };
+        debouncedSaveRef.current = setTimeout(() => {
+            onRiskSettingsChange(newSettings);
+        }, 500);
+    }, [onRiskSettingsChange]);
 
     const handleConnectWallet = (e: React.FormEvent) => {
         e.preventDefault();
@@ -124,8 +64,14 @@ export function SettingsTab({
     };
 
     const updateRiskSetting = <K extends keyof RiskSettings>(key: K, value: RiskSettings[K]) => {
-        onRiskSettingsChange({ ...riskSettings, [key]: value });
+        const newSettings = { ...localSettings, [key]: value };
+        setLocalSettings(newSettings); // Immediate UI update
+        saveSettings(newSettings); // Debounced API call
     };
+
+    // Helper to safely access settings with connection fallback 
+    // (using localSettings for UI consistency during edits)
+    const settings = localSettings;
 
     return (
         <div className="space-y-8">
@@ -142,13 +88,84 @@ export function SettingsTab({
                 </div>
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Strategy Mode Sliders */}
+                    <div className="col-span-1 md:col-span-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                            Active Strategy Configuration
+                            <span className="text-[10px] font-normal bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">
+                                Dynamic Risk Engine
+                            </span>
+                        </h4>
+
+                        <div className="space-y-6">
+                            {/* Yield Zone Start */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="font-medium text-slate-700">Yield Zone Start (Price)</span>
+                                    <span className="font-mono font-bold text-blue-600">{(settings.yieldTriggerPrice * 100).toFixed(0)}¢</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={0.50}
+                                    max={0.99}
+                                    step={0.01}
+                                    value={settings.yieldTriggerPrice}
+                                    onChange={(e) => updateRiskSetting('yieldTriggerPrice', parseFloat(e.target.value))}
+                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Prices above this level trigger "Yield Mode" (fixed sizing) instead of Kelly.
+                                </p>
+                            </div>
+
+                            {/* Yield Fixed Size */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="font-medium text-slate-700">Yield Fixed Size (Capital %)</span>
+                                    <span className="font-mono font-bold text-emerald-600">{(settings.yieldFixedPct * 100).toFixed(0)}%</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={0.01}
+                                    max={0.50}
+                                    step={0.01}
+                                    value={settings.yieldFixedPct}
+                                    onChange={(e) => updateRiskSetting('yieldFixedPct', parseFloat(e.target.value))}
+                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Fixed position size when in Yield Mode.
+                                </p>
+                            </div>
+
+                            {/* Min Whales for Yield */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="font-medium text-slate-700">Min. Whales for Yield Mode</span>
+                                    <span className="font-mono font-bold text-slate-900">{settings.yieldMinWhales} Whales</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={1}
+                                    max={5}
+                                    step={1}
+                                    value={settings.yieldMinWhales}
+                                    onChange={(e) => updateRiskSetting('yieldMinWhales', parseInt(e.target.value))}
+                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-600"
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Required consensus count to activate Yield Mode.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
                     {/* Kelly Multiplier */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                             Kelly Aggressiveness
                         </label>
                         <select
-                            value={riskSettings.kellyMultiplier}
+                            value={settings.kellyMultiplier}
                             onChange={(e) => updateRiskSetting('kellyMultiplier', parseFloat(e.target.value))}
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
                         >
@@ -164,14 +181,14 @@ export function SettingsTab({
                     {/* Max Risk Cap */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Max Risk Per Trade: {(riskSettings.maxRiskCap * 100).toFixed(0)}%
+                            Max Risk Per Trade: {(settings.maxRiskCap * 100).toFixed(0)}%
                         </label>
                         <input
                             type="range"
-                            min="0.01"
-                            max="0.20"
-                            step="0.01"
-                            value={riskSettings.maxRiskCap}
+                            min={0.01}
+                            max={0.20}
+                            step={0.01}
+                            value={settings.maxRiskCap}
                             onChange={(e) => updateRiskSetting('maxRiskCap', parseFloat(e.target.value))}
                             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                         />
@@ -188,7 +205,7 @@ export function SettingsTab({
                             Minimum Whale Consensus
                         </label>
                         <select
-                            value={riskSettings.minWallets}
+                            value={settings.minWallets}
                             onChange={(e) => updateRiskSetting('minWallets', parseInt(e.target.value))}
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
                         >
@@ -209,7 +226,7 @@ export function SettingsTab({
                         <label className="flex items-center gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={riskSettings.hideLottery}
+                                checked={settings.hideLottery}
                                 onChange={(e) => updateRiskSetting('hideLottery', e.target.checked)}
                                 className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                             />
@@ -222,14 +239,14 @@ export function SettingsTab({
                     {/* Longshot Tolerance (Alpha 2.0) */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Longshot Tolerance: {(riskSettings.longshotTolerance ?? 1.0).toFixed(1)}x
+                            Longshot Tolerance: {(settings.longshotTolerance ?? 1.0).toFixed(1)}x
                         </label>
                         <input
                             type="range"
-                            min="0.5"
-                            max="1.5"
-                            step="0.1"
-                            value={riskSettings.longshotTolerance ?? 1.0}
+                            min={0.5}
+                            max={1.5}
+                            step={0.1}
+                            value={settings.longshotTolerance ?? 1.0}
                             onChange={(e) => updateRiskSetting('longshotTolerance', parseFloat(e.target.value))}
                             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
                         />
@@ -251,7 +268,7 @@ export function SettingsTab({
                         <label className="flex items-center gap-3 cursor-pointer">
                             <input
                                 type="checkbox"
-                                checked={riskSettings.trendMode ?? true}
+                                checked={settings.trendMode ?? true}
                                 onChange={(e) => updateRiskSetting('trendMode', e.target.checked)}
                                 className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
                             />
@@ -266,217 +283,152 @@ export function SettingsTab({
                 </div>
             </section>
 
+            {/* Algo Configuration (Whale Quality & FLB) */}
+            <section className="bg-white rounded-lg border border-slate-200">
+                <div className="p-6 border-b border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
+                        <Sliders className="w-5 h-5" />
+                        Algo Configuration
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                        Configure the De-Biased Kelly Engine and Smart Money Filters.
+                    </p>
+                </div>
+
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* FLB Correction Mode */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            FLB Correction Mode
+                        </label>
+                        <select
+                            value={settings.flbCorrectionMode || 'STANDARD'}
+                            onChange={(e) => updateRiskSetting('flbCorrectionMode', e.target.value as any)}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
+                        >
+                            <option value="AGGRESSIVE">Aggressive (Heavy Penalty)</option>
+                            <option value="STANDARD">Standard (J-Curve)</option>
+                            <option value="OFF">Off (Naive Kelly)</option>
+                        </select>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Adjusts probabilities for Favorite-Longshot Bias
+                        </p>
+                    </div>
+
+                    {/* Minimum Whale Tier */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Minimum Whale Tier
+                        </label>
+                        <div className="flex rounded-lg overflow-hidden border border-slate-300">
+                            {['ALL', 'PRO', 'ELITE'].map((tier) => (
+                                <button
+                                    key={tier}
+                                    onClick={() => updateRiskSetting('minWhaleTier', tier as any)}
+                                    className={cn(
+                                        "flex-1 py-2 text-sm font-medium transition-colors",
+                                        (settings.minWhaleTier || 'ALL') === tier
+                                            ? "bg-slate-800 text-white"
+                                            : "bg-white text-slate-600 hover:bg-slate-50"
+                                    )}
+                                >
+                                    {tier}
+                                </button>
+                            ))}
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                            Filter signals by consensus quality
+                        </p>
+                    </div>
+
+                    {/* Optimism Tax */}
+                    <div>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={settings.optimismTax ?? true}
+                                onChange={(e) => updateRiskSetting('optimismTax', e.target.checked)}
+                                className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                            />
+                            <div>
+                                <span className="text-sm font-medium text-slate-700">Apply Optimism Tax</span>
+                                <p className="text-xs text-slate-500">5% handicap for Sports & Politics</p>
+                            </div>
+                        </label>
+                    </div>
+
+                    {/* Ignore Bagholders */}
+                    <div>
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={settings.ignoreBagholders ?? true}
+                                onChange={(e) => updateRiskSetting('ignoreBagholders', e.target.checked)}
+                                className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                            />
+                            <div>
+                                <span className="text-sm font-medium text-slate-700">Ignore Bagholders</span>
+                                <p className="text-xs text-slate-500">Exclude wallets with Discipline Score &lt; 30</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
             {/* User Wallet Connection */}
-            <section className="bg-slate-50 rounded-lg p-6 border border-slate-200">
+            < section className="bg-slate-50 rounded-lg p-6 border border-slate-200" >
                 <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <Wallet className="w-5 h-5" />
                     Your Wallet
                 </h3>
 
-                {userWallet ? (
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-slate-500">Connected as:</p>
-                            <p className="font-mono text-slate-900">{userWallet}</p>
-                        </div>
-                        <button
-                            onClick={onDisconnectWallet}
-                            className="btn-danger text-sm py-2 px-4"
-                        >
-                            Disconnect
-                        </button>
-                    </div>
-                ) : (
-                    <form onSubmit={handleConnectWallet} className="space-y-4">
-                        <p className="text-sm text-slate-500">
-                            Connect your wallet to compare your positions against whale consensus.
-                        </p>
-                        <div className="flex gap-3">
-                            <input
-                                type="text"
-                                value={connectAddress}
-                                onChange={(e) => setConnectAddress(e.target.value)}
-                                placeholder="0x..."
-                                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                            />
-                            <button type="submit" className="btn-primary">
-                                Connect
+                {
+                    userWallet ? (
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-slate-500">Connected as:</p>
+                                <p className="font-mono text-slate-900">{userWallet}</p>
+                            </div>
+                            <button
+                                onClick={onDisconnectWallet}
+                                className="btn-danger text-sm py-2 px-4"
+                            >
+                                Disconnect
                             </button>
                         </div>
-                    </form>
-                )}
-            </section>
-
-            {/* Tracked Whales Section */}
-            <section className="bg-white rounded-lg border border-slate-200">
-                <div className="p-6 border-b border-slate-200">
-                    <h3 className="text-lg font-bold text-slate-900 mb-1">
-                        Tracked Whale Wallets
-                    </h3>
-                    <p className="text-sm text-slate-500">
-                        Add whale wallets to track their positions and generate consensus signals.
-                    </p>
-                </div>
-
-                {/* Add Wallet Form */}
-                <form onSubmit={handleAddWallet} className="p-6 bg-slate-50 border-b border-slate-200">
-                    <div className="flex gap-3">
-                        <input
-                            type="text"
-                            value={newName}
-                            onChange={(e) => setNewName(e.target.value)}
-                            placeholder="Wallet Name (optional)"
-                            className="w-48 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                        />
-                        <input
-                            type="text"
-                            value={newAddress}
-                            onChange={(e) => setNewAddress(e.target.value)}
-                            placeholder="0x... wallet address"
-                            className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                        />
-                        <button
-                            type="submit"
-                            disabled={walletMutation.isPending}
-                            className="btn-primary flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Add Wallet
-                        </button>
-                    </div>
-                </form>
-
-                {/* Messages */}
-                {error && (
-                    <div className="mx-6 mt-4 flex items-center gap-2 text-rose-700 bg-rose-50 px-4 py-2 rounded-lg border border-rose-200">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-sm">{error}</span>
-                        <button onClick={() => setError(null)} className="ml-auto">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                )}
-
-                {success && (
-                    <div className="mx-6 mt-4 flex items-center gap-2 text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-200">
-                        <Check className="w-4 h-4" />
-                        <span className="text-sm">{success}</span>
-                        <button onClick={() => setSuccess(null)} className="ml-auto">
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                )}
-
-                {/* Wallet List */}
-                <div className="divide-y divide-slate-100">
-                    {isLoading ? (
-                        <div className="p-6 text-center text-slate-500">
-                            Loading wallets...
-                        </div>
-                    ) : wallets.length === 0 ? (
-                        <div className="p-6 text-center text-slate-500">
-                            No wallets tracked yet. Add a wallet above.
-                        </div>
                     ) : (
-                        wallets.map((wallet) => (
-                            <WalletRow
-                                key={wallet.address}
-                                wallet={wallet}
-                                onRemove={() => handleRemoveWallet(wallet.address)}
-                                onUpdateName={(name) => {
-                                    saveWalletName(wallet.address, name);
-                                    // Force re-render by triggering a state update
-                                    setSuccess(null);
-                                }}
-                            />
-                        ))
-                    )}
-                </div>
-            </section>
-        </div>
-    );
-}
-
-interface WalletRowProps {
-    wallet: WalletEntry;
-    onRemove: () => void;
-    onUpdateName: (name: string) => void;
-}
-
-function WalletRow({ wallet, onRemove, onUpdateName }: WalletRowProps) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editName, setEditName] = useState(wallet.name);
-
-    const handleSave = () => {
-        onUpdateName(editName);
-        setIsEditing(false);
-    };
-
-    return (
-        <div className="flex items-center justify-between px-6 py-4 hover:bg-slate-50">
-            <div className="flex-1 min-w-0">
-                {isEditing ? (
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            placeholder="Enter name..."
-                            className="px-3 py-1 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                            autoFocus
-                        />
-                        <button
-                            onClick={handleSave}
-                            className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"
-                        >
-                            <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => {
-                                setEditName(wallet.name);
-                                setIsEditing(false);
-                            }}
-                            className="p-1 text-slate-400 hover:bg-slate-100 rounded"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    </div>
-                ) : (
-                    <div>
-                        <div className="flex items-center gap-2">
-                            {wallet.name ? (
-                                <span className="font-semibold text-slate-900">{wallet.name}</span>
-                            ) : (
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="text-sm text-slate-400 hover:text-slate-600"
-                                >
-                                    + Add name
+                        <form onSubmit={handleConnectWallet} className="space-y-4">
+                            <p className="text-sm text-slate-500">
+                                Connect your wallet to compare your positions against whale consensus.
+                            </p>
+                            <div className="flex gap-3">
+                                <input
+                                    type="text"
+                                    value={connectAddress}
+                                    onChange={(e) => setConnectAddress(e.target.value)}
+                                    placeholder="0x..."
+                                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                                />
+                                <button type="submit" className="btn-primary">
+                                    Connect
                                 </button>
+                            </div>
+                            {error && (
+                                <div className="flex items-center gap-2 text-rose-600 text-sm">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {error}
+                                </div>
                             )}
-                            {wallet.name && (
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="text-xs text-slate-400 hover:text-slate-600"
-                                >
-                                    Edit
-                                </button>
+                            {success && (
+                                <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                                    <Check className="w-4 h-4" />
+                                    {success}
+                                </div>
                             )}
-                        </div>
-                        <p className="font-mono text-sm text-slate-500 truncate">
-                            {wallet.address}
-                        </p>
-                    </div>
-                )}
-            </div>
-
-            <button
-                onClick={onRemove}
-                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                title="Remove wallet"
-            >
-                <Trash2 className="w-4 h-4" />
-            </button>
-        </div>
+                        </form>
+                    )
+                }
+            </section >
+        </div >
     );
 }

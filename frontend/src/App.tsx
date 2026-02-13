@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
 import { Header } from './components/Header';
-import { SignalTable, PortfolioMonitor, SettingsTab } from './components/terminal';
+import { SignalTable, PortfolioMonitor, SettingsTab, WhaleManager } from './components/terminal';
 import { useSignals, usePortfolio, useWallets } from './hooks/useSignals';
 import { useSettings } from './hooks/useSettings';
 import { useBalance } from './hooks/useBalance';
@@ -19,7 +19,7 @@ const queryClient = new QueryClient({
   },
 });
 
-type TabType = 'scanner' | 'portfolio' | 'settings';
+type TabType = 'scanner' | 'whales' | 'portfolio' | 'settings';
 
 function TerminalApp() {
   const [activeTab, setActiveTab] = useState<TabType>('scanner');
@@ -65,7 +65,7 @@ function TerminalApp() {
   return (
     <div className="min-h-screen bg-white">
       <Header
-        usdcBalance={userWallet ? realBalance : null}
+        usdcBalance={userWallet ? realBalance : undefined}
         walletCount={walletCount}
         signalCount={signalCount}
         onRefresh={handleRefresh}
@@ -94,6 +94,15 @@ function TerminalApp() {
             Portfolio Monitor
           </button>
           <button
+            onClick={() => setActiveTab('whales')}
+            className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${activeTab === 'whales'
+              ? 'border-slate-900 text-slate-900'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            Whale Manager
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
             className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'settings'
               ? 'border-slate-900 text-slate-900'
@@ -119,6 +128,18 @@ function TerminalApp() {
               </p>
             </div>
             <SignalTable signals={signals} isLoading={signalsLoading} />
+          </div>
+        )}
+
+        {activeTab === 'whales' && (
+          <div className="max-w-6xl mx-auto space-y-4">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-slate-900">Whale CRM</h2>
+              <p className="text-sm text-slate-500">
+                Manage tracked wallets and analyze their performance metrics
+              </p>
+            </div>
+            <WhaleManager />
           </div>
         )}
 

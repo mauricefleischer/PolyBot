@@ -25,6 +25,26 @@ export interface AlphaBreakdown {
     details: string[];
 }
 
+export interface WhaleMeta {
+    avg_score: number;
+    has_elite: boolean;
+    has_bagholder: boolean;
+    wallet_tiers: Record<string, string>;
+}
+
+export interface WhaleScore {
+    address: string;
+    total_score: number;
+    roi_score: number;
+    discipline_score: number;
+    precision_score: number;
+    timing_score: number;
+    tier: 'ELITE' | 'PRO' | 'STD' | 'WEAK' | 'UNRATED';
+    tags: string[];
+    trade_count: number;
+    details: Record<string, string>;
+}
+
 export interface Signal {
     group_key: string;
     market_id: string;
@@ -41,6 +61,21 @@ export interface Signal {
     alpha_breakdown: AlphaBreakdown;
     recommended_size: number;
     kelly_breakdown: KellyBreakdown;
+    consensus: SignalConsensus;
+    whale_meta?: WhaleMeta; // DEPRECATED
+}
+
+export interface ConsensusContributor {
+    address: string;
+    score: number;
+    tier: string;
+}
+
+export interface SignalConsensus {
+    count: number;
+    has_elite: boolean;
+    weighted_score: number;
+    contributors: ConsensusContributor[];
 }
 
 export interface RiskSettings {
@@ -51,6 +86,13 @@ export interface RiskSettings {
     connectedWallet?: string;
     longshotTolerance: number;
     trendMode: boolean;
+    flbCorrectionMode: 'AGGRESSIVE' | 'STANDARD' | 'OFF';
+    optimismTax: boolean;
+    minWhaleTier: 'ALL' | 'PRO' | 'ELITE';
+    ignoreBagholders: boolean;
+    yieldTriggerPrice: number;
+    yieldFixedPct: number;
+    yieldMinWhales: number;
 }
 
 export interface PortfolioPosition {

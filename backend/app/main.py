@@ -14,6 +14,7 @@ from app.models.schemas import (
     PortfolioSchema,
     WalletConfigRequest,
     WalletAction,
+    WhaleScoreSchema,
 )
 from app.services.aggregator import consensus_engine
 from app.services.polymarket import gamma_client
@@ -47,6 +48,8 @@ app.add_middleware(
         "http://localhost:5174",
         "http://127.0.0.1:5174",
         "http://localhost:3000",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -77,6 +80,13 @@ async def get_signals(
     hide_lottery: bool = Query(default=False, description="Hide signals with Alpha Score < 30"),
     longshot_tolerance: float = Query(default=1.0, ge=0.5, le=1.5, description="FLB penalty scaling"),
     trend_mode: bool = Query(default=True, description="Enable momentum scoring"),
+    flb_correction_mode: str = Query(default="STANDARD", description="AGGRESSIVE, STANDARD, or OFF"),
+    optimism_tax: bool = Query(default=True, description="Apply 5% Optimism Tax for Sports/Politics"),
+    min_whale_tier: str = Query(default="ALL", description="ALL, PRO, or ELITE"),
+    ignore_bagholders: bool = Query(default=True, description="Exclude wallets with Discipline < 30"),
+    yield_trigger_price: float = Query(default=0.85, ge=0.01, le=1.0, description="Yield Mode trigger price"),
+    yield_fixed_pct: float = Query(default=0.10, ge=0.01, le=1.0, description="Yield Mode fixed size"),
+    yield_min_whales: int = Query(default=3, ge=1, description="Min whales for Yield Mode"),
 ):
     """
     Get ranked consensus signals from tracked whales.
@@ -97,6 +107,13 @@ async def get_signals(
             hide_lottery=hide_lottery,
             longshot_tolerance=longshot_tolerance,
             trend_mode=trend_mode,
+            flb_correction_mode=flb_correction_mode,
+            optimism_tax=optimism_tax,
+            min_whale_tier=min_whale_tier,
+            ignore_bagholders=ignore_bagholders,
+            yield_trigger_price=yield_trigger_price,
+            yield_fixed_pct=yield_fixed_pct,
+            yield_min_whales=yield_min_whales,
         )
         return signals
     except Exception as e:
@@ -173,6 +190,24 @@ async def get_wallets():
     }
 
 
+@app.get("/api/v1/whale-scores", response_model=list[WhaleScoreSchema])
+async def get_whale_scores():
+    """Get Smart Money Scores for all tracked wallets."""
+    from app.services.database import db_service
+    
+    scores = db_service.get_all_whale_scores()
+    return scores
+
+
+@app.post("/api/v1/whale-scores/refresh")
+async def refresh_whale_scores():
+    """Trigger a refresh of whale scores."""
+    # This is implicitly done in get_signals, but we can expose it
+    # if we want to separate scoring from signal generation.
+    # For now, we'll just return success as get_signals handles it lazy-ish.
+    return {"message": "Scores refresh on signal generation"}
+
+
 # ============================================================================
 # Settings Endpoints
 # ============================================================================
@@ -186,6 +221,13 @@ class SettingsRequest(BaseModel):
     connected_wallet: Optional[str] = None
     longshot_tolerance: Optional[float] = None
     trend_mode: Optional[bool] = None
+    flb_correction_mode: Optional[str] = None
+    optimism_tax: Optional[bool] = None
+    min_whale_tier: Optional[str] = None
+    ignore_bagholders: Optional[bool] = None
+    yield_trigger_price: Optional[float] = None
+    yield_fixed_pct: Optional[float] = None
+    yield_min_whales: Optional[int] = None
 
 
 class SettingsResponse(BaseModel):
@@ -197,6 +239,13 @@ class SettingsResponse(BaseModel):
     connected_wallet: Optional[str]
     longshot_tolerance: float
     trend_mode: bool
+    flb_correction_mode: str
+    optimism_tax: bool
+    min_whale_tier: str
+    ignore_bagholders: bool
+    yield_trigger_price: float = 0.85
+    yield_fixed_pct: float = 0.10
+    yield_min_whales: int = 3
 
 
 @app.get("/api/v1/settings", response_model=SettingsResponse)
@@ -213,6 +262,13 @@ async def get_settings():
         connected_wallet=settings_data.connected_wallet,
         longshot_tolerance=settings_data.longshot_tolerance,
         trend_mode=settings_data.trend_mode,
+        flb_correction_mode=settings_data.flb_correction_mode,
+        optimism_tax=settings_data.optimism_tax,
+        min_whale_tier=settings_data.min_whale_tier,
+        ignore_bagholders=settings_data.ignore_bagholders,
+        yield_trigger_price=getattr(settings_data, "yield_trigger_price", 0.85),
+        yield_fixed_pct=getattr(settings_data, "yield_fixed_pct", 0.10),
+        yield_min_whales=getattr(settings_data, "yield_min_whales", 3),
     )
 
 
@@ -229,6 +285,13 @@ async def update_settings(request: SettingsRequest):
         connected_wallet=request.connected_wallet,
         longshot_tolerance=request.longshot_tolerance,
         trend_mode=request.trend_mode,
+        flb_correction_mode=request.flb_correction_mode,
+        optimism_tax=request.optimism_tax,
+        min_whale_tier=request.min_whale_tier,
+        ignore_bagholders=request.ignore_bagholders,
+        yield_trigger_price=request.yield_trigger_price,
+        yield_fixed_pct=request.yield_fixed_pct,
+        yield_min_whales=request.yield_min_whales,
     )
     
     return SettingsResponse(
@@ -239,6 +302,13 @@ async def update_settings(request: SettingsRequest):
         connected_wallet=updated.connected_wallet,
         longshot_tolerance=updated.longshot_tolerance,
         trend_mode=updated.trend_mode,
+        flb_correction_mode=updated.flb_correction_mode,
+        optimism_tax=updated.optimism_tax,
+        min_whale_tier=updated.min_whale_tier,
+        ignore_bagholders=updated.ignore_bagholders,
+        yield_trigger_price=getattr(updated, "yield_trigger_price", 0.85),
+        yield_fixed_pct=getattr(updated, "yield_fixed_pct", 0.10),
+        yield_min_whales=getattr(updated, "yield_min_whales", 3),
     )
 
 

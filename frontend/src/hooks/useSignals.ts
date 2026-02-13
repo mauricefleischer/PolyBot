@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Signal, Portfolio, WalletConfigRequest, WalletConfigResponse, RiskSettings } from '../types/api';
+import type { Signal, Portfolio, WalletConfigRequest, WalletConfigResponse, RiskSettings, WhaleScore } from '../types/api';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -18,6 +18,13 @@ async function fetchSignals(
     params.set('hide_lottery', riskSettings.hideLottery.toString());
     params.set('longshot_tolerance', (riskSettings.longshotTolerance ?? 1.0).toString());
     params.set('trend_mode', (riskSettings.trendMode ?? true).toString());
+    params.set('flb_correction_mode', riskSettings.flbCorrectionMode || 'STANDARD');
+    params.set('optimism_tax', (riskSettings.optimismTax ?? true).toString());
+    params.set('min_whale_tier', riskSettings.minWhaleTier || 'ALL');
+    params.set('ignore_bagholders', (riskSettings.ignoreBagholders ?? true).toString());
+    params.set('yield_trigger_price', (riskSettings.yieldTriggerPrice ?? 0.85).toString());
+    params.set('yield_fixed_pct', (riskSettings.yieldFixedPct ?? 0.10).toString());
+    params.set('yield_min_whales', (riskSettings.yieldMinWhales ?? 3).toString());
 
     const response = await fetch(`${API_BASE}/signals?${params}`);
     if (!response.ok) {
@@ -55,10 +62,21 @@ async function configureWallet(request: WalletConfigRequest): Promise<WalletConf
 /**
  * Fetch tracked wallets
  */
-async function fetchWallets(): Promise<{ wallets: string[]; count: number }> {
+async function fetchWallets(): Promise<{ wallets: string[]; names: Record<string, string>; count: number }> {
     const response = await fetch(`${API_BASE}/config/wallets`);
     if (!response.ok) {
         throw new Error('Failed to fetch wallets');
+    }
+    return response.json();
+}
+
+/**
+ * Fetch whale scores
+ */
+async function fetchWhaleScores(): Promise<WhaleScore[]> {
+    const response = await fetch(`${API_BASE}/whale-scores`);
+    if (!response.ok) {
+        throw new Error('Failed to fetch whale scores');
     }
     return response.json();
 }
@@ -74,6 +92,13 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     hideLottery: false,
     longshotTolerance: 1.0,
     trendMode: true,
+    flbCorrectionMode: 'STANDARD',
+    optimismTax: true,
+    minWhaleTier: 'ALL',
+    ignoreBagholders: true,
+    yieldTriggerPrice: 0.85,
+    yieldFixedPct: 0.10,
+    yieldMinWhales: 3,
 };
 
 // ============================================================================
@@ -118,15 +143,47 @@ export function useWallets() {
 /**
  * Hook to add/remove wallets
  */
-export function useWalletMutation() {
+async function setWalletName(params: { address: string; name: string }) {
+    const response = await fetch(`${API_BASE}/config/wallet-name?address=${params.address}&name=${encodeURIComponent(params.name)}`, {
+        method: 'PUT',
+    });
+    if (!response.ok) throw new Error('Failed to set wallet name');
+    return response.json();
+}
+
+export function useWalletConfig() {
     const queryClient = useQueryClient();
 
-    return useMutation({
+    const mutation = useMutation({
         mutationFn: configureWallet,
         onSuccess: () => {
-            // Invalidate signals and wallets queries
             queryClient.invalidateQueries({ queryKey: ['wallets'] });
             queryClient.invalidateQueries({ queryKey: ['signals'] });
         },
+    });
+
+    const nameMutation = useMutation({
+        mutationFn: setWalletName,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['wallets'] });
+        },
+    });
+
+    return {
+        addWallet: (address: string) => mutation.mutateAsync({ action: 'add', address }),
+        removeWallet: (address: string) => mutation.mutateAsync({ action: 'remove', address }),
+        setWalletName: (address: string, name: string) => nameMutation.mutateAsync({ address, name }),
+        isPending: mutation.isPending || nameMutation.isPending,
+    };
+}
+
+/**
+ * Hook to fetch whale scores
+ */
+export function useWhaleScores() {
+    return useQuery({
+        queryKey: ['whale-scores'],
+        queryFn: fetchWhaleScores,
+        refetchInterval: 60000, // 1 minute polling
     });
 }

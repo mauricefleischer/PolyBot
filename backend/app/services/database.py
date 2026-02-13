@@ -30,6 +30,15 @@ class UserSettings:
     connected_wallet: Optional[str] = None
     longshot_tolerance: float = 1.0
     trend_mode: bool = True
+    # Whale Quality & De-Biased Kelly settings
+    flb_correction_mode: str = "STANDARD"  # "AGGRESSIVE" / "STANDARD" / "OFF"
+    optimism_tax: bool = True
+    min_whale_tier: str = "ALL"            # "ALL" / "PRO" / "ELITE"
+    ignore_bagholders: bool = True
+    # Yield Mode Settings
+    yield_trigger_price: float = 0.85
+    yield_fixed_pct: float = 0.10
+    yield_min_whales: int = 3
 
 
 class DatabaseService:
@@ -110,14 +119,38 @@ class DatabaseService:
             """)
             
             # Migrate: add new columns if missing
-            try:
-                cursor.execute("ALTER TABLE user_settings ADD COLUMN longshot_tolerance REAL DEFAULT 1.0")
-            except sqlite3.OperationalError:
-                pass  # Column already exists
-            try:
-                cursor.execute("ALTER TABLE user_settings ADD COLUMN trend_mode BOOLEAN DEFAULT 1")
-            except sqlite3.OperationalError:
-                pass  # Column already exists
+            for col_sql in [
+                "ALTER TABLE user_settings ADD COLUMN longshot_tolerance REAL DEFAULT 1.0",
+                "ALTER TABLE user_settings ADD COLUMN trend_mode BOOLEAN DEFAULT 1",
+                "ALTER TABLE user_settings ADD COLUMN flb_correction_mode TEXT DEFAULT 'STANDARD'",
+                "ALTER TABLE user_settings ADD COLUMN optimism_tax BOOLEAN DEFAULT 1",
+                "ALTER TABLE user_settings ADD COLUMN min_whale_tier TEXT DEFAULT 'ALL'",
+                "ALTER TABLE user_settings ADD COLUMN ignore_bagholders BOOLEAN DEFAULT 1",
+                "ALTER TABLE user_settings ADD COLUMN yield_trigger_price REAL DEFAULT 0.85",
+                "ALTER TABLE user_settings ADD COLUMN yield_fixed_pct REAL DEFAULT 0.10",
+                "ALTER TABLE user_settings ADD COLUMN yield_min_whales INTEGER DEFAULT 3",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+            
+            # Whale scores table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS whale_scores (
+                    address TEXT PRIMARY KEY,
+                    total_score INTEGER DEFAULT 50,
+                    roi_score INTEGER DEFAULT 50,
+                    discipline_score INTEGER DEFAULT 50,
+                    precision_score INTEGER DEFAULT 50,
+                    timing_score INTEGER DEFAULT 50,
+                    tier TEXT DEFAULT 'UNRATED',
+                    tags TEXT DEFAULT '[]',
+                    trade_count INTEGER DEFAULT 0,
+                    details TEXT DEFAULT '{}',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
     
     # =========================================================================
     # Wallet Operations
@@ -198,6 +231,13 @@ class DatabaseService:
                     connected_wallet=row["connected_wallet"],
                     longshot_tolerance=row["longshot_tolerance"] if "longshot_tolerance" in row.keys() else 1.0,
                     trend_mode=bool(row["trend_mode"]) if "trend_mode" in row.keys() else True,
+                    flb_correction_mode=row["flb_correction_mode"] if "flb_correction_mode" in row.keys() else "STANDARD",
+                    optimism_tax=bool(row["optimism_tax"]) if "optimism_tax" in row.keys() else True,
+                    min_whale_tier=row["min_whale_tier"] if "min_whale_tier" in row.keys() else "ALL",
+                    ignore_bagholders=bool(row["ignore_bagholders"]) if "ignore_bagholders" in row.keys() else True,
+                    yield_trigger_price=row["yield_trigger_price"] if "yield_trigger_price" in row.keys() else 0.85,
+                    yield_fixed_pct=row["yield_fixed_pct"] if "yield_fixed_pct" in row.keys() else 0.10,
+                    yield_min_whales=row["yield_min_whales"] if "yield_min_whales" in row.keys() else 3,
                 )
             
             return UserSettings(user_id=user_id)
@@ -211,7 +251,14 @@ class DatabaseService:
         hide_lottery: Optional[bool] = None,
         connected_wallet: Optional[str] = None,
         longshot_tolerance: Optional[float] = None,
-        trend_mode: Optional[bool] = None
+        trend_mode: Optional[bool] = None,
+        flb_correction_mode: Optional[str] = None,
+        optimism_tax: Optional[bool] = None,
+        min_whale_tier: Optional[str] = None,
+        ignore_bagholders: Optional[bool] = None,
+        yield_trigger_price: Optional[float] = None,
+        yield_fixed_pct: Optional[float] = None,
+        yield_min_whales: Optional[int] = None,
     ) -> UserSettings:
         """Update user settings."""
         current = self.get_settings(user_id)
@@ -221,8 +268,11 @@ class DatabaseService:
             cursor.execute("""
                 INSERT OR REPLACE INTO user_settings 
                 (user_id, kelly_multiplier, max_risk_cap, min_wallets, hide_lottery, 
-                 connected_wallet, longshot_tolerance, trend_mode, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 connected_wallet, longshot_tolerance, trend_mode,
+                 flb_correction_mode, optimism_tax, min_whale_tier, ignore_bagholders,
+                 yield_trigger_price, yield_fixed_pct, yield_min_whales,
+                 updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 user_id,
                 kelly_multiplier if kelly_multiplier is not None else current.kelly_multiplier,
@@ -232,6 +282,13 @@ class DatabaseService:
                 connected_wallet if connected_wallet is not None else current.connected_wallet,
                 longshot_tolerance if longshot_tolerance is not None else current.longshot_tolerance,
                 trend_mode if trend_mode is not None else current.trend_mode,
+                flb_correction_mode if flb_correction_mode is not None else current.flb_correction_mode,
+                optimism_tax if optimism_tax is not None else current.optimism_tax,
+                min_whale_tier if min_whale_tier is not None else current.min_whale_tier,
+                ignore_bagholders if ignore_bagholders is not None else current.ignore_bagholders,
+                yield_trigger_price if yield_trigger_price is not None else current.yield_trigger_price,
+                yield_fixed_pct if yield_fixed_pct is not None else current.yield_fixed_pct,
+                yield_min_whales if yield_min_whales is not None else current.yield_min_whales,
             ))
         
         return self.get_settings(user_id)
@@ -340,6 +397,80 @@ class DatabaseService:
                 (f"-{days}",)
             )
             return cursor.rowcount
+    
+    # =========================================================================
+    # Whale Scores
+    # =========================================================================
+    
+    def save_whale_score(self, address: str, score_data: dict) -> None:
+        """Save or update a whale's Smart Money Score."""
+        import json as _json
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO whale_scores
+                (address, total_score, roi_score, discipline_score, precision_score,
+                 timing_score, tier, tags, trade_count, details, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                address.lower(),
+                score_data.get("total_score", 50),
+                score_data.get("roi_score", 50),
+                score_data.get("discipline_score", 50),
+                score_data.get("precision_score", 50),
+                score_data.get("timing_score", 50),
+                score_data.get("tier", "UNRATED"),
+                _json.dumps(score_data.get("tags", [])),
+                score_data.get("trade_count", 0),
+                _json.dumps(score_data.get("details", {})),
+            ))
+    
+    def get_whale_score(self, address: str) -> Optional[dict]:
+        """Get a whale's Smart Money Score."""
+        import json as _json
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM whale_scores WHERE LOWER(address) = LOWER(?)",
+                (address,)
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "address": row["address"],
+                "total_score": row["total_score"],
+                "roi_score": row["roi_score"],
+                "discipline_score": row["discipline_score"],
+                "precision_score": row["precision_score"],
+                "timing_score": row["timing_score"],
+                "tier": row["tier"],
+                "tags": _json.loads(row["tags"]) if row["tags"] else [],
+                "trade_count": row["trade_count"],
+                "details": _json.loads(row["details"]) if row["details"] else {},
+            }
+    
+    def get_all_whale_scores(self) -> list[dict]:
+        """Get all stored whale scores."""
+        import json as _json
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM whale_scores ORDER BY total_score DESC")
+            return [
+                {
+                    "address": row["address"],
+                    "total_score": row["total_score"],
+                    "roi_score": row["roi_score"],
+                    "discipline_score": row["discipline_score"],
+                    "precision_score": row["precision_score"],
+                    "timing_score": row["timing_score"],
+                    "tier": row["tier"],
+                    "tags": _json.loads(row["tags"]) if row["tags"] else [],
+                    "trade_count": row["trade_count"],
+                    "details": _json.loads(row["details"]) if row["details"] else {},
+                }
+                for row in cursor.fetchall()
+            ]
 
 
 # Singleton instance

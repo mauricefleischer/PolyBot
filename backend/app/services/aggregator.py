@@ -9,6 +9,7 @@ Alpha Score 2.0 is a multi-factor model based on:
 - Position freshness / time decay
 """
 from __future__ import annotations
+import asyncio
 import json
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -18,11 +19,14 @@ from typing import Optional, List, Dict, Any
 
 from app.core.config import settings
 from app.models.schemas import (
-    RawSignal, SignalSchema, PortfolioPositionSchema, PortfolioSchema,
-    ScoringConfig, ScoreBreakdown,
+    RawSignal, SignalSchema, PortfolioSchema,
+    PortfolioPositionSchema,
+    ScoringConfig, ScoreBreakdown, SignalConsensus, ConsensusContributor
 )
 from app.services.polymarket import gamma_client
 from app.services.chain_data import web3_client
+from app.services.whale_scoring import whale_evaluator, Trade as WhaleTrade
+from app.services.risk_engine import risk_engine
 
 
 @dataclass
@@ -117,12 +121,17 @@ class ConsensusEngine:
         """
         Fetch and normalize positions for a single wallet.
         Implements Universal Netting: If wallet holds YES and NO, subtract min.
+        Also fetches trade activity timestamps for Freshness scoring.
         """
         raw_signals = []
         
         try:
-            # Fetch positions from Gamma API
-            positions = await gamma_client.fetch_positions(wallet_address)
+            # Fetch positions and trade activity concurrently
+            positions_task = gamma_client.fetch_positions(wallet_address)
+            activity_task = gamma_client.fetch_earliest_trades(wallet_address)
+            positions, earliest_trades = await asyncio.gather(
+                positions_task, activity_task
+            )
             
             if not positions:
                 return []
@@ -138,6 +147,8 @@ class ConsensusEngine:
                 "category": "Other",
                 "yes_token_id": "",
                 "no_token_id": "",
+                "yes_timestamp": None,
+                "no_timestamp": None,
             })
             
             for pos in positions:
@@ -161,13 +172,13 @@ class ConsensusEngine:
                 # The data-api uses 'asset' for token ID
                 token_id = pos.get("asset", pos.get("tokenId", pos.get("token_id", "")))
                 
-                # Extract timestamp if available
-                timestamp_str = pos.get("createdAt", pos.get("created_at", None))
+                # Get earliest trade timestamp from activity data
                 timestamp = None
-                if timestamp_str:
+                earliest_ts = earliest_trades.get(token_id)
+                if earliest_ts:
                     try:
-                        timestamp = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
-                    except (ValueError, AttributeError):
+                        timestamp = datetime.fromtimestamp(earliest_ts, tz=timezone.utc)
+                    except (ValueError, OSError):
                         pass
                 
                 market_key = f"{market_id}_{outcome}"
@@ -176,18 +187,19 @@ class ConsensusEngine:
                 mp["market_slug"] = market_slug
                 mp["outcome_label"] = outcome_label
                 mp["category"] = category
-                mp["timestamp"] = timestamp
                 
                 if outcome.upper() == "YES":
                     mp["yes_size"] += size
                     mp["yes_entry"] = avg_price
                     mp["yes_token_id"] = token_id
                     mp["yes_cur_price"] = current_price_raw
+                    mp["yes_timestamp"] = timestamp
                 else:
                     mp["no_size"] += size
                     mp["no_entry"] = avg_price
                     mp["no_token_id"] = token_id
                     mp["no_cur_price"] = current_price_raw
+                    mp["no_timestamp"] = timestamp
             
             # Apply Universal Netting and create RawSignals
             for market_key, mp in market_positions.items():
@@ -216,7 +228,7 @@ class ConsensusEngine:
                         market_name=mp["market_name"],
                         market_slug=mp.get("market_slug", ""),
                         token_id=mp.get("yes_token_id", ""),
-                        timestamp=mp.get("timestamp"),
+                        timestamp=mp.get("yes_timestamp"),
                     ))
                 
                 if no_size > 0:
@@ -233,7 +245,7 @@ class ConsensusEngine:
                         market_name=mp["market_name"],
                         market_slug=mp.get("market_slug", ""),
                         token_id=mp.get("no_token_id", ""),
-                        timestamp=mp.get("timestamp"),
+                        timestamp=mp.get("no_timestamp"),
                     ))
 
         except Exception as e:
@@ -547,10 +559,17 @@ class ConsensusEngine:
         hide_lottery: bool = False,
         longshot_tolerance: float = 1.0,
         trend_mode: bool = True,
+        flb_correction_mode: str = "STANDARD",
+        optimism_tax: bool = True,
+        min_whale_tier: str = "ALL",
+        ignore_bagholders: bool = True,
+        yield_trigger_price: float = 0.85,
+        yield_fixed_pct: float = 0.10,
+        yield_min_whales: int = 3,
     ) -> list[SignalSchema]:
         """
         Get fully processed, ranked signals for the API.
-        Uses Alpha Score 2.0 multi-factor model.
+        Uses Alpha Score 2.0 multi-factor model + Whale Quality Scoring.
         
         Ranking:
         1. Filter: wallet_count >= min_wallets
@@ -558,7 +577,86 @@ class ConsensusEngine:
         3. Secondary: alpha_score (desc)
         4. Tertiary: total_conviction (desc)
         """
+        from app.services.database import db_service
+        
         aggregated = await self.aggregate_signals()
+        
+        # =====================================================================
+        # Whale Scoring: compute Smart Money Scores for all tracked wallets
+        # =====================================================================
+        whale_scores_map: Dict[str, dict] = {}  # address → score breakdown
+        
+        # Collect all wallet addresses from aggregated signals
+        all_wallet_addrs: set[str] = set()
+        for agg in aggregated:
+            all_wallet_addrs.update(agg.wallet_addresses)
+        
+        # Fetch activity and compute scores for each wallet
+        for wallet_addr in all_wallet_addrs:
+            # Check DB cache first
+            cached = db_service.get_whale_score(wallet_addr)
+            if cached:
+                whale_scores_map[wallet_addr.lower()] = cached
+                continue
+            
+            try:
+                activity = await gamma_client.fetch_activity(wallet_addr, limit=500)
+                # Convert to WhaleTrade objects
+                whale_trades = []
+                for t in activity:
+                    whale_trades.append(WhaleTrade(
+                        asset=t.get("asset", ""),
+                        condition_id=t.get("conditionId", ""),
+                        side=t.get("side", "BUY").upper(),
+                        price=float(t.get("price", 0)),
+                        size=float(t.get("size", 0)),
+                        timestamp=int(t.get("timestamp", 0)),
+                        market_slug=t.get("slug", ""),
+                    ))
+                
+                # Count active positions for precision scoring
+                positions = await gamma_client.fetch_positions(wallet_addr)
+                active_count = len(positions) if positions else 0
+                
+                # Compute score
+                score_result = whale_evaluator.compute_score(whale_trades, active_count)
+                score_dict = score_result.to_dict()
+                
+                # Cache in DB
+                db_service.save_whale_score(wallet_addr, score_dict)
+                whale_scores_map[wallet_addr.lower()] = score_dict
+            except Exception as e:
+                print(f"Whale scoring error for {wallet_addr[:10]}...: {e}")
+                whale_scores_map[wallet_addr.lower()] = {
+                    "total_score": 50, "tier": "UNRATED", "tags": [],
+                    "roi_score": 50, "discipline_score": 50,
+                    "precision_score": 50, "timing_score": 50,
+                    "trade_count": 0, "details": {},
+                }
+        
+        # =====================================================================
+        # Wallet Filtering by Tier / Bagholder status
+        # =====================================================================
+        tier_min_score = {"ALL": 0, "PRO": 60, "ELITE": 80}
+        min_score_threshold = tier_min_score.get(min_whale_tier, 0)
+        
+        # Re-filter aggregated signals based on whale quality
+        if min_whale_tier != "ALL" or ignore_bagholders:
+            for agg in aggregated:
+                filtered_wallets = set()
+                for w in agg.wallet_addresses:
+                    ws = whale_scores_map.get(w.lower(), {})
+                    w_score = ws.get("total_score", 50)
+                    w_disc = ws.get("discipline_score", 50)
+                    
+                    # Filter by tier
+                    if w_score < min_score_threshold:
+                        continue
+                    # Filter bagholders (discipline < 30)
+                    if ignore_bagholders and w_disc < 30:
+                        continue
+                    filtered_wallets.add(w)
+                agg.wallet_addresses = filtered_wallets
         
         # Fetch 7-day price averages from CLOB API for momentum scoring
         token_ids = [agg.token_id for agg in aggregated if agg.token_id]
@@ -594,14 +692,62 @@ class ConsensusEngine:
             if hide_lottery and alpha_score < 30:
                 continue
             
-            # Kelly sizing
-            rec_size, kelly_breakdown = self.calculate_kelly_size(
+            # Build WhaleMeta for this signal
+            signal_whale_scores: List[int] = []
+            has_elite = False
+            has_bagholder = False
+            wallet_tiers: Dict[str, str] = {}
+            for w in agg.wallet_addresses:
+                ws = whale_scores_map.get(w.lower(), {})
+                w_total = ws.get("total_score", 50)
+                w_tier = ws.get("tier", "UNRATED")
+                signal_whale_scores.append(w_total)
+                wallet_tiers[w[:10] + "..."] = w_tier
+                if w_tier == "ELITE":
+                    has_elite = True
+                if w_tier == "WEAK":
+                    has_bagholder = True
+            
+            avg_whale_score = (
+                sum(signal_whale_scores) // len(signal_whale_scores)
+                if signal_whale_scores else 50
+            )
+            
+            # Build SignalConsensus object
+            consensus_contributors = []
+            for w in agg.wallet_addresses:
+                ws = whale_scores_map.get(w.lower(), {})
+                consensus_contributors.append(ConsensusContributor(
+                    address=w,
+                    score=ws.get("total_score", 50),
+                    tier=ws.get("tier", "UNRATED")
+                ))
+            
+            # Sort contributors by score desc
+            consensus_contributors.sort(key=lambda c: -c.score)
+
+            consensus_data = SignalConsensus(
+                count=agg.wallet_count,
+                has_elite=has_elite,
+                weighted_score=avg_whale_score,
+                contributors=consensus_contributors
+            )
+            
+            # De-Biased Kelly sizing (replaces naive Kelly)
+            rec_size, kelly_breakdown = risk_engine.calculate_position_size(
                 current_price=agg.current_price,
                 alpha_score=alpha_score,
                 wallet_count=agg.wallet_count,
-                user_balance=user_balance,
+                category=agg.category,
+                whale_scores=signal_whale_scores,
+                user_balance=user_balance or settings.default_user_balance,
                 kelly_multiplier=kelly_multiplier,
-                max_risk_cap=max_risk_cap
+                max_risk_cap=max_risk_cap,
+                flb_correction_mode=flb_correction_mode,
+                optimism_tax=optimism_tax,
+                yield_trigger_price=yield_trigger_price,
+                yield_fixed_pct=yield_fixed_pct,
+                yield_min_whales=yield_min_whales,
             )
             
             signals.append(SignalSchema(
@@ -620,6 +766,8 @@ class ConsensusEngine:
                 alpha_breakdown=score_breakdown.to_dict(),
                 recommended_size=rec_size,
                 kelly_breakdown=kelly_breakdown,
+                consensus=consensus_data,  # New structured object
+                whale_meta=None,     # Deprecated, using consensus object
             ))
         
         # Sort: wallet_count desc, alpha_score desc, conviction desc
