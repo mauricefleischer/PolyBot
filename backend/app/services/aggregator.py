@@ -628,6 +628,7 @@ class ConsensusEngine:
                     "roi_score": 50, "discipline_score": 50,
                     "precision_score": 50, "timing_score": 50,
                     "trade_count": 0, "details": {},
+                    "win_rate": 0.0, "roi_perf": 0.0,
                 }
         
 
