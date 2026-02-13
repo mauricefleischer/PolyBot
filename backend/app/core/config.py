@@ -3,6 +3,7 @@ Configuration module for the Consensus Terminal backend.
 Loads environment variables and provides typed settings.
 """
 from functools import lru_cache
+from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -58,9 +59,9 @@ class Settings(BaseSettings):
         description="Polymarket Conditional Tokens (ERC1155) on Polygon"
     )
     
-    # Wallets file path
+    # Wallets file path (Absolute, relative to backend root)
     wallets_file_path: str = Field(
-        default="wallets.json",
+        default=str(Path(__file__).resolve().parent.parent.parent / "wallets.json"),
         description="Path to persistent wallets storage"
     )
     
