@@ -259,7 +259,7 @@ class DatabaseService:
                  connected_wallet, longshot_tolerance, trend_mode,
                  yield_trigger_price, yield_fixed_pct, yield_min_whales,
                  updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 user_id,
                 kelly_multiplier if kelly_multiplier is not None else current.kelly_multiplier,
