@@ -411,17 +411,12 @@ The Risk Engine uses a **De-Biased** version of Kelly. It doesn't trust the mark
 Step A — Net Odds:
     b = (1 - price) / price
 
-Step B — Probability Calibration (The "De-Biasing" Step):
+Step B — Probability Calibration:
     p_market = price
     
-    # 1. Apply FLB Correction (if enabled in settings)
-    # Adjusts for retail irrationality at extremes
-    p_real = apply_flb_correction(p_market, mode="STANDARD")
-    
-    # 2. Apply Optimism Tax (if enabled in settings)
-    # Penalties for Sports/Politics due to fan bias
-    if category in ["Sports", "Politics"]:
-        p_real = p_real * 0.95  # -5% penalty
+    # 1. Apply FLB Correction (Standard J-Curve)
+    # Adjusts for retail irrationality at extremes (Hardcoded)
+    p_real = apply_flb_correction(p_market)
 
 Step C — Real Probability (with consensus boosts):
     # Reward elite consensus and high alpha scores
@@ -596,9 +591,7 @@ ORDER BY
 
 | Filter | Parameter | Default | Effect |
 |--------|-----------|---------|--------|
-| Min Consensus | `min_wallets` | 2 | Hide signals with fewer whales |
 | Hide Lottery | `hide_lottery` | false | Remove signals with `alpha < 30` |
-| Ignore Bagholders | `ignore_bagholders` | true | Hide signals from whales with Discipline < 30 |
 | Longshot Tolerance | `longshot_tolerance` | 1.0 | Scale FLB penalties (0.5–1.5) |
 | Trend Mode | `trend_mode` | true | Enable/disable momentum scoring |
 
@@ -718,7 +711,6 @@ All endpoints are prefixed with `/api/v1`.
 | Kelly Multiplier | 0.25 | 0.1–1.0 | Settings UI / API |
 | Max Risk Cap | 5% | 1%–20% | Settings UI / API |
 | Min Wallets | 2 | 1–10 | Settings UI / API |
-| Ignore Bagholders | true | on/off | Settings UI / API |
 | Longshot Tolerance | 1.0 | 0.5–1.5 | Settings UI / API |
 | Trend Mode | true | on/off | Settings UI / API |
 | Yield Trigger | 0.85 | 0.50–0.99 | Settings UI / API |

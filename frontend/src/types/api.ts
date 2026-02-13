@@ -86,10 +86,6 @@ export interface RiskSettings {
     connectedWallet?: string;
     longshotTolerance: number;
     trendMode: boolean;
-    flbCorrectionMode: 'AGGRESSIVE' | 'STANDARD' | 'OFF';
-    optimismTax: boolean;
-    minWhaleTier: 'ALL' | 'PRO' | 'ELITE';
-    ignoreBagholders: boolean;
     yieldTriggerPrice: number;
     yieldFixedPct: number;
     yieldMinWhales: number;

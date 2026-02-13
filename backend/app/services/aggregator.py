@@ -427,7 +427,7 @@ class ConsensusEngine:
         wallet_count: int,
         user_balance: float = None,
         kelly_multiplier: float = 0.25,
-        max_risk_cap: float = 0.05
+        max_risk_cap: float = 0.05,
     ) -> tuple[float, Dict[str, Any]]:
         """
         Calculate recommended position size using Fractional Kelly Criterion.
@@ -559,10 +559,7 @@ class ConsensusEngine:
         hide_lottery: bool = False,
         longshot_tolerance: float = 1.0,
         trend_mode: bool = True,
-        flb_correction_mode: str = "STANDARD",
-        optimism_tax: bool = True,
-        min_whale_tier: str = "ALL",
-        ignore_bagholders: bool = True,
+        trend_mode: bool = True,
         yield_trigger_price: float = 0.85,
         yield_fixed_pct: float = 0.10,
         yield_min_whales: int = 3,
@@ -634,27 +631,7 @@ class ConsensusEngine:
                     "trade_count": 0, "details": {},
                 }
         
-        # =====================================================================
-        # Wallet Filtering by Tier / Bagholder status
-        # =====================================================================
-        tier_min_score = {"ALL": 0, "PRO": 60, "ELITE": 80}
-        min_score_threshold = tier_min_score.get(min_whale_tier, 0)
-        
-        # Re-filter aggregated signals based on whale quality
-        if min_whale_tier != "ALL" or ignore_bagholders:
-            for agg in aggregated:
-                filtered_wallets = set()
-                for w in agg.wallet_addresses:
-                    ws = whale_scores_map.get(w.lower(), {})
-                    w_score = ws.get("total_score", 50)
-                    w_disc = ws.get("discipline_score", 50)
-                    
-                    # Filter by tier
-                    if w_score < min_score_threshold:
-                        continue
-                    # Filter bagholders (discipline < 30)
-                    if ignore_bagholders and w_disc < 30:
-                        continue
+                    # Removed filtering by tier/bagholder (showing all signals, relying on scoring)
                     filtered_wallets.add(w)
                 agg.wallet_addresses = filtered_wallets
         
@@ -743,8 +720,8 @@ class ConsensusEngine:
                 user_balance=user_balance or settings.default_user_balance,
                 kelly_multiplier=kelly_multiplier,
                 max_risk_cap=max_risk_cap,
-                flb_correction_mode=flb_correction_mode,
-                optimism_tax=optimism_tax,
+                kelly_multiplier=kelly_multiplier,
+                max_risk_cap=max_risk_cap,
                 yield_trigger_price=yield_trigger_price,
                 yield_fixed_pct=yield_fixed_pct,
                 yield_min_whales=yield_min_whales,

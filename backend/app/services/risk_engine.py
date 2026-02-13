@@ -33,10 +33,7 @@ class RiskSettings:
     """User-configurable risk parameters."""
     kelly_multiplier: float = 0.25       # Fraction of full Kelly (0.1–1.0)
     max_risk_cap: float = 0.05           # Hard cap per trade (1%–20%)
-    flb_correction_mode: str = "STANDARD"  # "AGGRESSIVE" / "STANDARD" / "OFF"
-    optimism_tax: bool = True            # Apply 5% discount for Sports/Politics
-    min_whale_tier: str = "ALL"          # "ALL" / "PRO" / "ELITE"
-    ignore_bagholders: bool = True       # Exclude discipline < 30 wallets
+    max_risk_cap: float = 0.05           # Hard cap per trade (1%–20%)
     yield_trigger_price: float = 0.85    # Price above which "Yield Mode" triggers
     yield_fixed_pct: float = 0.10        # Fixed size % for Yield Mode
     yield_min_whales: int = 3            # Min whales for Yield Mode
@@ -58,52 +55,33 @@ class RiskEngine:
     @staticmethod
     def calibrate_probability(
         p_market: float,
-        category: str = "Other",
-        mode: str = "STANDARD",
-        optimism_tax: bool = True,
     ) -> Tuple[float, List[str]]:
         """
         Adjust market price using FLB correction (Wolfers 2004 J-Curve).
+        Hardcoded to STANDARD mode.
 
         Zones:
-          - Lottery    (p < 0.05): Retail massively overpays
-          - Hope       (0.05 ≤ p < 0.15): Moderate overpricing
+          - Lottery    (p < 0.05): Retail massively overpays (-30%)
+          - Hope       (0.05 ≤ p < 0.15): Moderate overpricing (-10%)
           - Efficient  (0.15 ≤ p ≤ 0.90): No adjustment
-          - Favorite   (p > 0.90): Retail underpays for certainty
+          - Favorite   (p > 0.90): Retail underpays for certainty (+1pp)
 
         Returns: (calibrated_probability, list_of_adjustments)
         """
         adjustments: List[str] = []
         p_real = p_market
 
-        if mode == "AGGRESSIVE":
-            if p_market < 0.05:
-                p_real = p_market * 0.5
-                adjustments.append(f"FLB_LOTTERY -50% ({p_market:.3f}→{p_real:.3f})")
-            elif p_market < 0.15:
-                p_real = p_market * 0.8
-                adjustments.append(f"FLB_HOPE -20% ({p_market:.3f}→{p_real:.3f})")
-            elif p_market > 0.90:
-                p_real = min(0.99, p_market + 0.02)
-                adjustments.append(f"FLB_FAVORITE +2pp ({p_market:.3f}→{p_real:.3f})")
-        elif mode == "STANDARD":
-            if p_market < 0.05:
-                p_real = p_market * 0.7
-                adjustments.append(f"FLB_LOTTERY -30% ({p_market:.3f}→{p_real:.3f})")
-            elif p_market < 0.15:
-                p_real = p_market * 0.9
-                adjustments.append(f"FLB_HOPE -10% ({p_market:.3f}→{p_real:.3f})")
-            elif p_market > 0.90:
-                p_real = min(0.99, p_market + 0.01)
-                adjustments.append(f"FLB_FAVORITE +1pp ({p_market:.3f}→{p_real:.3f})")
-        # mode == "OFF" → p_real stays as p_market
-
-        # Optimism Tax (Becker 2025): High-sentiment markets inflate prices
-        if optimism_tax and category in ("Sports", "Politics"):
-            p_before = p_real
-            p_real = p_real * 0.95
-            adjustments.append(f"OPTIMISM_TAX -5% ({p_before:.3f}→{p_real:.3f})")
-
+        # FLB J-Curve (Standard Mode Logic)
+        if p_market < 0.05:
+            p_real = p_market * 0.7
+            adjustments.append(f"FLB_LOTTERY -30% ({p_market:.3f}→{p_real:.3f})")
+        elif p_market < 0.15:
+            p_real = p_market * 0.9
+            adjustments.append(f"FLB_HOPE -10% ({p_market:.3f}→{p_real:.3f})")
+        elif p_market > 0.90:
+            p_real = min(0.99, p_market + 0.01)
+            adjustments.append(f"FLB_FAVORITE +1pp ({p_market:.3f}→{p_real:.3f})")
+        
         # Safety clamp
         p_real = max(0.001, min(0.99, p_real))
 
@@ -158,8 +136,7 @@ class RiskEngine:
         user_balance: float = 1000.0,
         kelly_multiplier: float = 0.25,
         max_risk_cap: float = 0.05,
-        flb_correction_mode: str = "STANDARD",
-        optimism_tax: bool = True,
+        max_risk_cap: float = 0.05,
         yield_trigger_price: float = 0.85,
         yield_fixed_pct: float = 0.10,
         yield_min_whales: int = 3,
@@ -203,18 +180,14 @@ class RiskEngine:
         # BRANCH 2: Speculation Mode (De-Biased Kelly)
         # =========================================================================
         
-        # Step 1: FLB Calibration
-        p_calibrated, adjustments = self.calibrate_probability(
-            current_price, category, flb_correction_mode, optimism_tax
-        )
+        # Step 1: FLB Calibration (Standard)
+        p_calibrated, adjustments = self.calibrate_probability(current_price)
 
         # Step 2: Consensus boosts
         real_prob = p_calibrated
         boosts: List[str] = []
 
-        if wallet_count >= 3:
-            real_prob += 0.05
-            boosts.append("+5% Consensus (≥3 wallets)")
+        # Removed old wallet_count boost (redundant with Whale Score Dampener)
 
         if alpha_score >= 70:
             real_prob += 0.05
