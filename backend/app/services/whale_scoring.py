@@ -48,6 +48,8 @@ class WhaleScoreBreakdown(BaseModel):
     tier: str = "STD"
     trade_count: int = 0
     details: Dict[str, str] = {}
+    win_rate: float = 0.0
+    roi_perf: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +62,8 @@ class WhaleScoreBreakdown(BaseModel):
             "tier": self.tier,
             "trade_count": self.trade_count,
             "details": self.details,
+            "win_rate": self.win_rate,
+            "roi_perf": self.roi_perf,
         }
 
 
@@ -174,7 +178,7 @@ class WhaleEvaluator:
     # Pillar 1: ROI Performance (35%)
     # =========================================================================
 
-    def _calc_roi_score(self, matched: List[MatchedTrade]) -> Tuple[int, str]:
+    def _calc_roi_score(self, matched: List[MatchedTrade]) -> Tuple[int, str, float, float]:
         """
         Modified Information Ratio.
 
@@ -185,7 +189,7 @@ class WhaleEvaluator:
           Bonus: +10 if total profit > $50K
         """
         if not matched:
-            return 50, "NO_DATA"
+            return 50, "NO_DATA", 0.0, 0.0
 
         total_entry_cost = sum(m.entry_price * m.size for m in matched)
         total_profit = sum(m.pnl_usdc for m in matched)
@@ -211,7 +215,7 @@ class WhaleEvaluator:
             score = min(100, score + 10)
             detail += " +WHALE"
 
-        return max(0, min(100, score)), detail
+        return max(0, min(100, score)), detail, win_rate, raw_roi
 
     # =========================================================================
     # Pillar 2: Discipline — Anti-Disposition Effect (25%)
@@ -393,7 +397,7 @@ class WhaleEvaluator:
         matched = self._match_trades(trades)
 
         # Step 2: Calculate pillars
-        roi_score, roi_detail = self._calc_roi_score(matched)
+        roi_score, roi_detail, win_rate, roi_perf = self._calc_roi_score(matched)
         disc_score, disc_detail = self._calc_discipline_score(matched)
         prec_score, prec_detail = self._calc_precision_score(
             trades, active_positions, roi_score
@@ -447,8 +451,11 @@ class WhaleEvaluator:
                 "roi": roi_detail,
                 "discipline": disc_detail,
                 "precision": prec_detail,
+                "precision": prec_detail,
                 "timing": time_detail,
             },
+            win_rate=win_rate,
+            roi_perf=roi_perf,
         )
 
 

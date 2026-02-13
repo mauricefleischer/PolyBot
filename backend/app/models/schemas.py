@@ -98,6 +98,8 @@ class WhaleScoreSchema(BaseModel):
     tier: str = Field(description="ELITE, PRO, STD, WEAK, or UNRATED")
     tags: List[str] = Field(default=[], description="Attribute tags: HLD, PRC, CHRN, etc.")
     trade_count: int = Field(ge=0)
+    win_rate: float = Field(default=0.0, description="Win Rate (0-1.0)")
+    roi_perf: float = Field(default=0.0, description="Total ROI (profit/cost)")
     details: Dict[str, str] = Field(default={})
 
 

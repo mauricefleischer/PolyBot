@@ -43,6 +43,8 @@ export interface WhaleScore {
     tags: string[];
     trade_count: number;
     details: Record<string, string>;
+    win_rate?: number;
+    roi_perf?: number;
 }
 
 export interface Signal {

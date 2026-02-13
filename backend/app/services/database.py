@@ -131,6 +131,16 @@ class DatabaseService:
                 except sqlite3.OperationalError:
                     pass  # Column already exists
             
+            # Migrate: add whale stats columns
+            for col_sql in [
+                "ALTER TABLE whale_scores ADD COLUMN win_rate REAL DEFAULT 0.0",
+                "ALTER TABLE whale_scores ADD COLUMN roi_perf REAL DEFAULT 0.0",
+            ]:
+                try:
+                    cursor.execute(col_sql)
+                except sqlite3.OperationalError:
+                    pass
+            
             # Whale scores table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS whale_scores (
@@ -393,8 +403,8 @@ class DatabaseService:
             cursor.execute("""
                 INSERT OR REPLACE INTO whale_scores
                 (address, total_score, roi_score, discipline_score, precision_score,
-                 timing_score, tier, tags, trade_count, details, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                 timing_score, tier, tags, trade_count, details, win_rate, roi_perf, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 address.lower(),
                 score_data.get("total_score", 50),
@@ -406,6 +416,8 @@ class DatabaseService:
                 _json.dumps(score_data.get("tags", [])),
                 score_data.get("trade_count", 0),
                 _json.dumps(score_data.get("details", {})),
+                score_data.get("win_rate", 0.0),
+                score_data.get("roi_perf", 0.0),
             ))
     
     def get_whale_score(self, address: str) -> Optional[dict]:
@@ -431,6 +443,8 @@ class DatabaseService:
                 "tags": _json.loads(row["tags"]) if row["tags"] else [],
                 "trade_count": row["trade_count"],
                 "details": _json.loads(row["details"]) if row["details"] else {},
+                "win_rate": row["win_rate"] if "win_rate" in row.keys() else 0.0,
+                "roi_perf": row["roi_perf"] if "roi_perf" in row.keys() else 0.0,
             }
     
     def get_all_whale_scores(self) -> list[dict]:
@@ -451,6 +465,8 @@ class DatabaseService:
                     "tags": _json.loads(row["tags"]) if row["tags"] else [],
                     "trade_count": row["trade_count"],
                     "details": _json.loads(row["details"]) if row["details"] else {},
+                    "win_rate": row["win_rate"] if "win_rate" in row.keys() else 0.0,
+                    "roi_perf": row["roi_perf"] if "roi_perf" in row.keys() else 0.0,
                 }
                 for row in cursor.fetchall()
             ]
