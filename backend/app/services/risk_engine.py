@@ -186,8 +186,6 @@ class RiskEngine:
         real_prob = p_calibrated
         boosts: List[str] = []
 
-        # Removed old wallet_count boost (redundant with Whale Score Dampener)
-
         if alpha_score >= 70:
             real_prob += 0.05
             boosts.append("+5% Alpha (≥70)")

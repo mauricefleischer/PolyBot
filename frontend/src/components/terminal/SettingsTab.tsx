@@ -147,7 +147,7 @@ export function SettingsTab({
                                 <input
                                     type="number"
                                     min={1}
-                                    max={10}
+                                    max={100}
                                     step={1}
                                     value={settings.yieldMinWhales}
                                     onChange={(e) => updateRiskSetting('yieldMinWhales', parseInt(e.target.value) || 1)}
@@ -207,7 +207,7 @@ export function SettingsTab({
                         <input
                             type="number"
                             min={1}
-                            max={10}
+                            max={100}
                             step={1}
                             value={settings.minWallets}
                             onChange={(e) => updateRiskSetting('minWallets', parseInt(e.target.value) || 1)}

@@ -418,9 +418,8 @@ Step B — Probability Calibration:
     # Adjusts for retail irrationality at extremes (Hardcoded)
     p_real = apply_flb_correction(p_market)
 
-Step C — Real Probability (with consensus boosts):
-    # Reward elite consensus and high alpha scores
-    if wallet_count ≥ 3:  p_real += 0.05
+Step C — Real Probability (with alpha boost):
+    # Reward high alpha scores
     if alpha_score ≥ 70:  p_real += 0.05
     
     p_final = min(p_real, 0.85)  # Hard cap
@@ -717,7 +716,6 @@ All endpoints are prefixed with `/api/v1`.
 | Yield Fixed % | 10% | 1%–50% | Settings UI / API |
 | Yield Min Whales | 3 | 1–5 | Settings UI / API |
 | Probability Cap | 0.85 | — | Hardcoded in aggregator |
-| Consensus Boost | +0.05 | — | Hardcoded in Kelly |
 | Alpha Boost | +0.05 | — | Hardcoded in Kelly |
 | Divergence Min Wallets | ≥ 2 | — | Hardcoded in portfolio |
 | Trim PnL Threshold | > 20% | — | Hardcoded in portfolio |
