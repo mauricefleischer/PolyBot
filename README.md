@@ -101,8 +101,8 @@ graph LR
     D --> E[CLOB API: 7d Price History]
     E --> F["Alpha Score 2.0"]
     F --> G{Strategy Check}
-    G -->|Price ≥ Trigger| H[Yield Mode (Fixed Size)]
-    G -->|Price < Trigger| I[Kelly Criterion Sizing]
+    G -->|"Price >= Trigger"| H["Yield Mode (Fixed Size)"]
+    G -->|"Price < Trigger"| I[Kelly Criterion Sizing]
     H --> J[Ranked Signals → API]
     I --> J
 ```
