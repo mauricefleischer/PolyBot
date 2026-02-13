@@ -541,7 +541,7 @@ Categories affect the **Smart Short** sub-factor of Alpha Score 2.0 (see Section
 | Pillar | Weight | Metric | Purpose |
 |--------|--------|--------|---------|
 | **ROI / Performance** | 35% | Modified Information Ratio | Rewards consistent profitability & high win rate. Penalizes losses. |
-| **Discipline** | 25% | Disposition Effect Ratio | Rewards "Diamond Hands" (cutting losses fast, letting winners run). |
+| **Discipline** | 25% | Disposition Effect Ratio | Rewards "Diamond Hands". **Score < 30 = BAGHOLDER** (holds losers too long). |
 | **Precision** | 20% | Turnover Index | Penalizes overtrading/churning. Rewards "Sniper" behavior. |
 | **Timing** | 20% | Pioneer Score | Rewards entering early (contrarian) vs. late (FOMO). |
 
@@ -598,6 +598,7 @@ ORDER BY
 |--------|-----------|---------|--------|
 | Min Consensus | `min_wallets` | 2 | Hide signals with fewer whales |
 | Hide Lottery | `hide_lottery` | false | Remove signals with `alpha < 30` |
+| Ignore Bagholders | `ignore_bagholders` | true | Hide signals from whales with Discipline < 30 |
 | Longshot Tolerance | `longshot_tolerance` | 1.0 | Scale FLB penalties (0.5–1.5) |
 | Trend Mode | `trend_mode` | true | Enable/disable momentum scoring |
 
@@ -621,7 +622,9 @@ All endpoints are prefixed with `/api/v1`.
 | `user_balance` | float | 1000 | USDC balance for position sizing |
 | `kelly_multiplier` | float | 0.25 | Kelly fraction (0.1–1.0) |
 | `max_risk_cap` | float | 0.05 | Max risk per trade (0.01–0.20) |
+| `max_risk_cap` | float | 0.05 | Max risk per trade (0.01–0.20) |
 | `hide_lottery` | bool | false | Hide Alpha < 30 |
+| `ignore_bagholders` | bool | true | Hide signals from Discipline < 30 |
 | `longshot_tolerance` | float | 1.0 | FLB penalty scaling (0.5–1.5) |
 | `trend_mode` | bool | true | Enable momentum scoring |
 | `yield_trigger_price` | float | 0.85 | Yield Mode activation price |
@@ -715,6 +718,7 @@ All endpoints are prefixed with `/api/v1`.
 | Kelly Multiplier | 0.25 | 0.1–1.0 | Settings UI / API |
 | Max Risk Cap | 5% | 1%–20% | Settings UI / API |
 | Min Wallets | 2 | 1–10 | Settings UI / API |
+| Ignore Bagholders | true | on/off | Settings UI / API |
 | Longshot Tolerance | 1.0 | 0.5–1.5 | Settings UI / API |
 | Trend Mode | true | on/off | Settings UI / API |
 | Yield Trigger | 0.85 | 0.50–0.99 | Settings UI / API |
