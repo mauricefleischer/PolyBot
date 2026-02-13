@@ -178,13 +178,13 @@ export function WhaleManager() {
                                         <>
                                             <span className="text-emerald-600">
                                                 {wallet.score.win_rate !== undefined
-                                                    ? (wallet.score.win_rate * 100).toFixed(0)
+                                                    ? (wallet.score.win_rate * 100).toFixed(2)
                                                     : wallet.score.precision_score}%
                                             </span>
                                             <span className="mx-1 text-slate-300">|</span>
-                                            <span className={wallet.score.roi_perf && wallet.score.roi_perf < 0 ? "text-rose-500" : "text-blue-600"}>
+                                            <span className={wallet.score.roi_perf !== undefined && wallet.score.roi_perf < 0 ? "text-rose-500" : "text-blue-600"}>
                                                 {wallet.score.roi_perf !== undefined
-                                                    ? (wallet.score.roi_perf * 100).toFixed(0)
+                                                    ? (wallet.score.roi_perf * 100).toFixed(2)
                                                     : wallet.score.roi_score}%
                                             </span>
                                         </>
