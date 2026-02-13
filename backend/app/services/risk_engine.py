@@ -136,7 +136,6 @@ class RiskEngine:
         user_balance: float = 1000.0,
         kelly_multiplier: float = 0.25,
         max_risk_cap: float = 0.05,
-        max_risk_cap: float = 0.05,
         yield_trigger_price: float = 0.85,
         yield_fixed_pct: float = 0.10,
         yield_min_whales: int = 3,

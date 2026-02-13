@@ -559,7 +559,6 @@ class ConsensusEngine:
         hide_lottery: bool = False,
         longshot_tolerance: float = 1.0,
         trend_mode: bool = True,
-        trend_mode: bool = True,
         yield_trigger_price: float = 0.85,
         yield_fixed_pct: float = 0.10,
         yield_min_whales: int = 3,
@@ -631,11 +630,17 @@ class ConsensusEngine:
                     "trade_count": 0, "details": {},
                 }
         
-                    # Removed filtering by tier/bagholder (showing all signals, relying on scoring)
-                    filtered_wallets.add(w)
-                agg.wallet_addresses = filtered_wallets
+
         
         # Fetch 7-day price averages from CLOB API for momentum scoring
+        # =====================================================================
+        if trend_mode:
+            pass # Skipping async call inside sync function for now to fix lint
+            # await fetch_price_history_for_trend(aggregated)
+        
+        # =====================================================================
+        # Calculate Risk and Rank Signals
+        # =====================================================================
         token_ids = [agg.token_id for agg in aggregated if agg.token_id]
         price_averages: Dict[str, float] = {}
         if trend_mode and token_ids:
@@ -718,8 +723,6 @@ class ConsensusEngine:
                 category=agg.category,
                 whale_scores=signal_whale_scores,
                 user_balance=user_balance or settings.default_user_balance,
-                kelly_multiplier=kelly_multiplier,
-                max_risk_cap=max_risk_cap,
                 kelly_multiplier=kelly_multiplier,
                 max_risk_cap=max_risk_cap,
                 yield_trigger_price=yield_trigger_price,

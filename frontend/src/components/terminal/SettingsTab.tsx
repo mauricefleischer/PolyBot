@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Wallet, Sliders, Check, AlertCircle } from 'lucide-react';
-import { cn } from '../../lib/utils';
+
 import type { RiskSettings } from '../../types/api';
 
 const KELLY_OPTIONS = [
@@ -37,7 +37,7 @@ export function SettingsTab({
     }, [riskSettings]);
 
     // Debounced save function
-    const debouncedSaveRef = useRef<ReturnType<typeof setTimeout>>();
+    const debouncedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const saveSettings = useCallback((newSettings: RiskSettings) => {
         if (debouncedSaveRef.current) {
@@ -145,13 +145,13 @@ export function SettingsTab({
                                     <span className="font-mono font-bold text-slate-900">{settings.yieldMinWhales} Whales</span>
                                 </div>
                                 <input
-                                    type="range"
+                                    type="number"
                                     min={1}
-                                    max={5}
+                                    max={10}
                                     step={1}
                                     value={settings.yieldMinWhales}
-                                    onChange={(e) => updateRiskSetting('yieldMinWhales', parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-600"
+                                    onChange={(e) => updateRiskSetting('yieldMinWhales', parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 font-mono"
                                 />
                                 <p className="mt-1 text-xs text-slate-500">
                                     Required consensus count to activate Yield Mode.
@@ -204,15 +204,15 @@ export function SettingsTab({
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                             Minimum Whale Consensus
                         </label>
-                        <select
+                        <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            step={1}
                             value={settings.minWallets}
-                            onChange={(e) => updateRiskSetting('minWallets', parseInt(e.target.value))}
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500"
-                        >
-                            {[1, 2, 3, 4, 5].map(n => (
-                                <option key={n} value={n}>{n} wallet{n > 1 ? 's' : ''}</option>
-                            ))}
-                        </select>
+                            onChange={(e) => updateRiskSetting('minWallets', parseInt(e.target.value) || 1)}
+                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 font-mono"
+                        />
                         <p className="mt-1 text-xs text-slate-500">
                             Hide signals below this threshold
                         </p>
