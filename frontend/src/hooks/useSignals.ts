@@ -18,10 +18,6 @@ async function fetchSignals(
     params.set('hide_lottery', riskSettings.hideLottery.toString());
     params.set('longshot_tolerance', (riskSettings.longshotTolerance ?? 1.0).toString());
     params.set('trend_mode', (riskSettings.trendMode ?? true).toString());
-    params.set('flb_correction_mode', riskSettings.flbCorrectionMode || 'STANDARD');
-    params.set('optimism_tax', (riskSettings.optimismTax ?? true).toString());
-    params.set('min_whale_tier', riskSettings.minWhaleTier || 'ALL');
-    params.set('ignore_bagholders', (riskSettings.ignoreBagholders ?? true).toString());
     params.set('yield_trigger_price', (riskSettings.yieldTriggerPrice ?? 0.85).toString());
     params.set('yield_fixed_pct', (riskSettings.yieldFixedPct ?? 0.10).toString());
     params.set('yield_min_whales', (riskSettings.yieldMinWhales ?? 3).toString());
@@ -92,10 +88,6 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     hideLottery: false,
     longshotTolerance: 1.0,
     trendMode: true,
-    flbCorrectionMode: 'STANDARD',
-    optimismTax: true,
-    minWhaleTier: 'ALL',
-    ignoreBagholders: true,
     yieldTriggerPrice: 0.85,
     yieldFixedPct: 0.10,
     yieldMinWhales: 3,

@@ -31,10 +31,6 @@ class UserSettings:
     longshot_tolerance: float = 1.0
     trend_mode: bool = True
     # Whale Quality & De-Biased Kelly settings
-    flb_correction_mode: str = "STANDARD"  # "AGGRESSIVE" / "STANDARD" / "OFF"
-    optimism_tax: bool = True
-    min_whale_tier: str = "ALL"            # "ALL" / "PRO" / "ELITE"
-    ignore_bagholders: bool = True
     # Yield Mode Settings
     yield_trigger_price: float = 0.85
     yield_fixed_pct: float = 0.10
@@ -231,10 +227,6 @@ class DatabaseService:
                     connected_wallet=row["connected_wallet"],
                     longshot_tolerance=row["longshot_tolerance"] if "longshot_tolerance" in row.keys() else 1.0,
                     trend_mode=bool(row["trend_mode"]) if "trend_mode" in row.keys() else True,
-                    flb_correction_mode=row["flb_correction_mode"] if "flb_correction_mode" in row.keys() else "STANDARD",
-                    optimism_tax=bool(row["optimism_tax"]) if "optimism_tax" in row.keys() else True,
-                    min_whale_tier=row["min_whale_tier"] if "min_whale_tier" in row.keys() else "ALL",
-                    ignore_bagholders=bool(row["ignore_bagholders"]) if "ignore_bagholders" in row.keys() else True,
                     yield_trigger_price=row["yield_trigger_price"] if "yield_trigger_price" in row.keys() else 0.85,
                     yield_fixed_pct=row["yield_fixed_pct"] if "yield_fixed_pct" in row.keys() else 0.10,
                     yield_min_whales=row["yield_min_whales"] if "yield_min_whales" in row.keys() else 3,
@@ -252,10 +244,6 @@ class DatabaseService:
         connected_wallet: Optional[str] = None,
         longshot_tolerance: Optional[float] = None,
         trend_mode: Optional[bool] = None,
-        flb_correction_mode: Optional[str] = None,
-        optimism_tax: Optional[bool] = None,
-        min_whale_tier: Optional[str] = None,
-        ignore_bagholders: Optional[bool] = None,
         yield_trigger_price: Optional[float] = None,
         yield_fixed_pct: Optional[float] = None,
         yield_min_whales: Optional[int] = None,
@@ -269,10 +257,9 @@ class DatabaseService:
                 INSERT OR REPLACE INTO user_settings 
                 (user_id, kelly_multiplier, max_risk_cap, min_wallets, hide_lottery, 
                  connected_wallet, longshot_tolerance, trend_mode,
-                 flb_correction_mode, optimism_tax, min_whale_tier, ignore_bagholders,
                  yield_trigger_price, yield_fixed_pct, yield_min_whales,
                  updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 user_id,
                 kelly_multiplier if kelly_multiplier is not None else current.kelly_multiplier,
@@ -282,10 +269,6 @@ class DatabaseService:
                 connected_wallet if connected_wallet is not None else current.connected_wallet,
                 longshot_tolerance if longshot_tolerance is not None else current.longshot_tolerance,
                 trend_mode if trend_mode is not None else current.trend_mode,
-                flb_correction_mode if flb_correction_mode is not None else current.flb_correction_mode,
-                optimism_tax if optimism_tax is not None else current.optimism_tax,
-                min_whale_tier if min_whale_tier is not None else current.min_whale_tier,
-                ignore_bagholders if ignore_bagholders is not None else current.ignore_bagholders,
                 yield_trigger_price if yield_trigger_price is not None else current.yield_trigger_price,
                 yield_fixed_pct if yield_fixed_pct is not None else current.yield_fixed_pct,
                 yield_min_whales if yield_min_whales is not None else current.yield_min_whales,
