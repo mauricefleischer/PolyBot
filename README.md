@@ -241,103 +241,6 @@ Alpha Score = Clamp(0, 100,  Base + FLB + Momentum + SmartShort + Freshness)
 The FLB is a well-documented market anomaly: **cheap contracts (longshots) are systematically overpriced** by retail traders who overweight small probabilities, while **expensive contracts (favorites) are systematically underpriced** because bettors avoid low-payout-ratio bets.
 
 PolyBot divides the current market price `p` into four zones:
-
-| Zone | Price Range | Raw Score | Behavior |
-|------|------------|-----------|----------|
-| **Lottery** | `p < $0.05` | **-40** × `longshot_tolerance` | Massive retail overpricing. Whales buying here are likely wrong. |
-| **Hope** | `$0.05 ≤ p < $0.15` | **-20** × `longshot_tolerance` | Moderate overpricing. Penalized less than Lottery. |
-| **Confusion** | `$0.15 ≤ p ≤ $0.85` | **0** | Efficiently priced zone. No FLB edge. |
-| **Favorite Value** | `p > $0.85` | **+15** | Underpriced due to risk-aversion discount. |
-
-**User-Tunable Parameter:** `longshot_tolerance` (range: 0.5–1.5, default: 1.0)
-
-- At `0.5x`: Lenient — penalties are halved (Lottery = -20 instead of -40)
-- At `1.0x`: Default — standard FLB penalties
-- At `1.5x`: Strict — penalties are 50% harsher (Lottery = -60 instead of -40)
-
-The Favorite Value zone is **not** scaled by `longshot_tolerance` (it's a fixed +15).
-
-**Example:**
-
-```
-Price = $0.08 (Hope Zone), longshot_tolerance = 1.2
-FLB Score = int(-20 × 1.2) = -24
-```
-
----
-
-### Sub-Factor 2: Momentum
-
-**Purpose:** Detect breakout or falling-knife signals by comparing the current price to its 7-day moving average.
-
-**Data Source:** CLOB API `prices-history` endpoint (see Section 4).
-
-```
-ratio = current_price / 7d_average
-pct_diff = (ratio - 1.0) × 100
-```
-
-| Condition | Score | Meaning |
-|-----------|-------|---------|
-| `ratio > 1.05` (price 5%+ above avg) | **+10** | Bullish breakout — price is trending up |
-| `ratio < 0.95` (price 5%+ below avg) | **-10** | Falling knife — price is trending down |
-| `0.95 ≤ ratio ≤ 1.05` | **0** | Near average, no momentum signal |
-
-**User-Tunable Parameter:** `trend_mode` (boolean, default: `true`)
-
-- When `false`: Momentum is always 0 (disabled).
-- When `true`: Momentum is calculated from 7-day price data.
-- If price history is unavailable (new market, API error): Momentum defaults to 0.
-
-**Example:**
-
-```
-Current Price = $0.72, 7d Average = $0.65
-ratio = 0.72 / 0.65 = 1.108
-pct_diff = +10.8%
-→ Breakout (+10)
-```
-
----
-
-### Sub-Factor 3: Smart Short Score
-
-**Rationale:** Retail prediction market participants have a well-documented **long bias** — they prefer YES bets because of optimism and the desire for positive outcomes. Whales who bet NO are expressing contrarian conviction, which is statistically more likely to contain alpha.
-
-The bonus is sector-weighted because some categories have stronger sentiment biases than others:
-
-| Direction | Sector | Score | Why |
-|-----------|--------|-------|-----|
-| NO | Sports, Politics | **+20** | Highest public sentiment / desirability bias |
-| NO | Entertainment | **+15** | Strong but slightly lower desirability bias |
-| NO | Finance, Other | **+10** | More efficient markets, smaller edge |
-| YES | *(any)* | **0** | Not penalized, just no extra bonus |
-
----
-
-### Sub-Factor 4: Freshness / Time Decay
-
-**Purpose:** Recent positions have higher predictive power than stale ones. A position opened today is more informative than one opened two weeks ago.
-
-**Data Source:** Data API `/activity` endpoint. For each tracked wallet, the trade history is fetched and the **earliest trade timestamp per asset** is used as the position open time.
-
-```
-GET https://data-api.polymarket.com/activity
-    ?user={wallet_address}
-    &limit=500
-
-→ Returns list of trades with Unix `timestamp`, `asset`, `conditionId`, `side`, etc.
-→ We extract: min(timestamp) per asset → position open time.
-```
-
-```
-days_since_entry = (now - earliest_trade_timestamp) / 86400
-freshness = max(0, floor(10 - 2 × days_since_entry))
-```
-
-| Age | Score | Label |
-|-----|-------|-------|
-| < 1 day | **+10** | Fresh signal |
 | 1 day | **+8** | Recent |
 | 2 days | **+6** | Recent |
 | 3 days | **+4** | Aging |
@@ -401,79 +304,12 @@ if price >= yield_trigger_price and count >= yield_min_whales:
 
 ## 9. Fractional Kelly Criterion
 
-The Kelly Criterion calculates the **mathematically optimal bet size** to maximize long-term growth of a bankroll, given an estimate of edge.
+See [Risk Management](docs/RISK_MANAGEMENT.md) for the full "De-Biased Kelly" formula.
 
-### Formula (Step by Step)
-
-The Risk Engine uses a **De-Biased** version of Kelly. It doesn't trust the market price blindly.
-
-```python
-Step A — Net Odds:
-    b = (1 - price) / price
-
-Step B — Probability Calibration:
-    p_market = price
-    
-    # 1. Apply FLB Correction (Standard J-Curve)
-    # Adjusts for retail irrationality at extremes (Hardcoded)
-    p_real = apply_flb_correction(p_market)
-
-Step C — Real Probability (with alpha boost):
-    # Reward high alpha scores
-    if alpha_score ≥ 70:  p_real += 0.05
-    
-    p_final = min(p_real, 0.85)  # Hard cap
-
-Step D — Kelly Fraction:
-    q = 1 - p_final
-    f = (p_final * b - q) / b
-
-Step E — Final Sizing:
-    if f ≤ 0 → $0 (Negative EV, do not bet)
-    stake_pct = f × kelly_multiplier
-    final_pct = min(stake_pct, max_risk_cap)
-    recommended_size = user_balance × final_pct
-```
-
-### Parameter Explanations
-
-| Parameter | Meaning | Default | Range |
-|-----------|---------|---------|-------|
-| `kelly_multiplier` | Fraction of full Kelly to use. Full Kelly (1.0x) is volatile; fractional (0.25x) is smoother. | 0.25 | 0.1–1.0 |
-| `max_risk_cap` | Hard ceiling on any single bet as % of bankroll. | 5% | 1%–20% |
-| `prob_cap` | Maximum estimated probability after boosts. Prevents overconfidence. | 0.85 | hardcoded |
-| Consensus Boost | +5% to estimated probability when ≥3 whales agree. | +0.05 | — |
-| Alpha Boost | +5% to estimated probability when Alpha Score ≥ 70. | +0.05 | — |
-
-### Worked Example
-
-| Input | Value |
-|-------|-------|
-| Current Price | $0.60 |
-| Wallet Count | 4 |
-| Alpha Score | 75 |
-| User Balance | $10,000 |
-| Kelly Multiplier | 0.25 |
-| Max Risk Cap | 5% |
-
-```
-b = (1 - 0.60) / 0.60 = 0.667
-p = 0.60 + 0.05 (consensus) + 0.05 (alpha) = 0.70
-q = 0.30
-f = (0.70 × 0.667 - 0.30) / 0.667 = 0.250
-
-stake_pct = 0.250 × 0.25 = 0.0625 (6.25%)
-final_pct = min(0.0625, 0.05) = 0.05  (capped at 5%)
-recommended = $10,000 × 0.05 = $500
-```
-
-### Edge Cases
-
-| Condition | Result |
-|-----------|--------|
-| `price ≤ 0` or `price ≥ 1` | $0, error: "Invalid price" |
-| `f ≤ 0` (negative Kelly) | $0, reason: "Negative EV" |
-| `stake_pct > max_risk_cap` | Capped at `max_risk_cap` |
+**Summary**:
+1.  **Calibrate**: Adjust market price for Favorite-Longshot Bias.
+2.  **Boost**: Add probability if Alpha Score > 70.
+3.  **Dampen**: Scale bet size by Whale Consensus Quality (Elite = 1.0x, Weak = 0.25x).
 
 ---
 

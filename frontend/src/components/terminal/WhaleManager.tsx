@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Trash2, Plus, AlertCircle, Check } from 'lucide-react';
+import { Tooltip, WhaleScoreTooltip, TierGuideTooltip, PerformanceTagsTooltip } from '../ui/Tooltip';
+import { Trash2, Plus, AlertCircle, Check, HelpCircle } from 'lucide-react';
 import { useWallets, useWhaleScores, useWalletConfig } from '../../hooks/useSignals';
-import { Tooltip, WhaleScoreTooltip } from '../ui/Tooltip';
 
 export function WhaleManager() {
     const { data: walletsData, isLoading: walletsLoading } = useWallets();
@@ -116,8 +116,26 @@ export function WhaleManager() {
                     <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
                         <tr>
                             <th className="px-6 py-3 w-48">Address / Name</th>
-                            <th className="px-6 py-3 w-32">Tier & Score</th>
-                            <th className="px-6 py-3">Performance Tags</th>
+                            <th className="px-6 py-3 w-32">
+                                <div className="flex items-center gap-1">
+                                    Tier & Score
+                                    <Tooltip content={<TierGuideTooltip />}>
+                                        <div className="text-slate-400 hover:text-slate-600 cursor-help">
+                                            <HelpCircle className="w-3.5 h-3.5" />
+                                        </div>
+                                    </Tooltip>
+                                </div>
+                            </th>
+                            <th className="px-6 py-3">
+                                <div className="flex items-center gap-1">
+                                    Performance Tags
+                                    <Tooltip content={<PerformanceTagsTooltip />}>
+                                        <div className="text-slate-400 hover:text-slate-600 cursor-help">
+                                            <HelpCircle className="w-3.5 h-3.5" />
+                                        </div>
+                                    </Tooltip>
+                                </div>
+                            </th>
                             <th className="px-6 py-3 text-right">Stats (Win% | ROI)</th>
                             <th className="px-6 py-3 text-right">Actions</th>
                         </tr>

@@ -223,8 +223,8 @@ export function WhaleScoreTooltip({ score }: WhaleScoreTooltipProps) {
             <div className="flex items-center justify-between border-b border-slate-700 pb-1">
                 <span className="font-bold text-slate-200">Whale Score</span>
                 <span className={`font-mono font-bold ${score.tier === 'ELITE' ? 'text-purple-400' :
-                        score.tier === 'PRO' ? 'text-emerald-400' :
-                            score.tier === 'WEAK' ? 'text-rose-400' : 'text-slate-400'
+                    score.tier === 'PRO' ? 'text-emerald-400' :
+                        score.tier === 'WEAK' ? 'text-rose-400' : 'text-slate-400'
                     }`}>
                     {score.total_score} ({score.tier})
                 </span>
@@ -354,6 +354,93 @@ export function KellyTooltipContent({ size, breakdown }: KellyTooltipContentProp
                 <span className="font-bold text-right text-blue-400">
                     {((breakdown.capped_percent || 0) * 100).toFixed(1)}%
                 </span>
+            </div>
+        </div>
+    );
+}
+
+export function AlphaGuideTooltip() {
+    return (
+        <div className="space-y-2 min-w-[220px]">
+            <div className="font-bold border-b border-slate-700 pb-1 text-slate-200">
+                Alpha Score Guide
+            </div>
+
+            <div className="grid grid-cols-[70px_1fr] gap-x-2 gap-y-1.5 text-[10px] text-slate-300">
+                <span className="text-slate-400 font-mono">Base</span>
+                <span>Signal Strength (Volume/Price)</span>
+
+                <span className="text-slate-400 font-mono">FLB</span>
+                <span>Front-running protection</span>
+
+                <span className="text-slate-400 font-mono">Momentum</span>
+                <span>Price Velocity & Acceleration</span>
+
+                <span className="text-slate-400 font-mono">Smart Short</span>
+                <span>High value trading against retail</span>
+
+                <span className="text-slate-400 font-mono">Freshness</span>
+                <span>Time decay penalty</span>
+            </div>
+        </div>
+    );
+}
+
+export function TierGuideTooltip() {
+    return (
+        <div className="space-y-2 min-w-[180px]">
+            <div className="font-bold border-b border-slate-700 pb-1 text-slate-200">
+                Whale Tier Guide
+            </div>
+            <div className="space-y-1.5 text-[10px]">
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-purple-400">ELITE (80+)</span>
+                    <span className="text-slate-400">Perfect Track Record</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-emerald-400">PRO (60-79)</span>
+                    <span className="text-slate-400">Consistent Profit</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-amber-400">STD (40-59)</span>
+                    <span className="text-slate-400">Average Trader</span>
+                </div>
+                <div className="flex justify-between items-center">
+                    <span className="font-bold text-rose-400">WEAK (&lt;40)</span>
+                    <span className="text-slate-400">Counter-Trade Signal</span>
+                </div>
+            </div>
+            <div className="border-t border-slate-700 pt-1.5 mt-1 text-[9px] text-slate-500 leading-tight italic">
+                Based on ROI, Precision, Discipline, and Timing over last 500 trades.
+            </div>
+        </div>
+    );
+}
+
+export function PerformanceTagsTooltip() {
+    return (
+        <div className="space-y-2 min-w-[200px]">
+            <div className="font-bold border-b border-slate-700 pb-1 text-slate-200">
+                Performance Tags Guide
+            </div>
+            <div className="grid grid-cols-[45px_1fr] gap-x-2 gap-y-1.5 text-[10px] text-slate-300">
+                <span className="text-purple-400 font-bold font-mono">PROF</span>
+                <span>Highly profitable trader</span>
+
+                <span className="text-emerald-400 font-bold font-mono">PRC</span>
+                <span>High precision sniper</span>
+
+                <span className="text-blue-400 font-bold font-mono">HLD</span>
+                <span>Diamond hands (holds &gt;24h)</span>
+
+                <span className="text-amber-400 font-bold font-mono">PNIR</span>
+                <span>Early pioneer in markets</span>
+
+                <span className="text-rose-400 font-bold font-mono">DUMP</span>
+                <span>Fast dumper / Paper hands</span>
+
+                <span className="text-slate-400 font-bold font-mono">CHRN</span>
+                <span>High volume churner</span>
             </div>
         </div>
     );

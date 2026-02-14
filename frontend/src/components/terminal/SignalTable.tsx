@@ -6,9 +6,9 @@ import {
     flexRender,
     type ColumnDef,
 } from '@tanstack/react-table';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, HelpCircle } from 'lucide-react';
 import type { Signal } from '../../types/api';
-import { Tooltip, AlphaTooltipContent, KellyTooltipContent, WhaleTooltipContent } from '../ui/Tooltip';
+import { Tooltip, AlphaTooltipContent, KellyTooltipContent, WhaleTooltipContent, AlphaGuideTooltip } from '../ui/Tooltip';
 import {
     cn,
     formatCurrency,
@@ -117,13 +117,20 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
             {
                 id: 'alpha_score',
                 header: ({ column }) => (
-                    <button
-                        className="flex items-center gap-1 hover:text-slate-900"
-                        onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-                    >
-                        Alpha Score
-                        <ArrowUpDown className="h-3 w-3" />
-                    </button>
+                    <div className="flex items-center">
+                        <button
+                            className="flex items-center gap-1 hover:text-slate-900"
+                            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+                        >
+                            Alpha Score
+                            <ArrowUpDown className="h-3 w-3" />
+                        </button>
+                        <Tooltip content={<AlphaGuideTooltip />}>
+                            <div className="ml-1 text-slate-400 hover:text-slate-600 cursor-help">
+                                <HelpCircle className="w-3.5 h-3.5" />
+                            </div>
+                        </Tooltip>
+                    </div>
                 ),
                 accessorKey: 'alpha_score',
                 cell: ({ row }) => {
@@ -158,7 +165,7 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
                                     )}
                                 </div>
                             </div>
-                        </Tooltip>
+                        </Tooltip >
                     );
                 },
             },
