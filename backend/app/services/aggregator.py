@@ -161,7 +161,17 @@ class ConsensusEngine:
                 
                 # Get market metadata
                 market_name = pos.get("title", pos.get("question", "Unknown Market"))
-                market_slug = pos.get("slug", gamma_client.get_market_slug(market_id))
+                # Prioritize cached Event Slug (points to main event page), fallback to position slug
+                market_slug = gamma_client.get_market_slug(market_id)
+                
+                # If missing from cache, fetch metadata explicitly
+                if not market_slug:
+                    market_data = await gamma_client.fetch_market_by_condition(market_id)
+                    if market_data:
+                        market_slug = gamma_client.get_market_slug(market_id)
+                
+                if not market_slug:
+                    market_slug = pos.get("slug", "")
                 
                 if not market_name:
                     market_name = gamma_client.get_market_name(market_id)
@@ -724,7 +734,7 @@ class ConsensusEngine:
                 wallet_count=agg.wallet_count,
                 category=agg.category,
                 whale_scores=signal_whale_scores,
-                user_balance=user_balance or settings.default_user_balance,
+                user_balance=user_balance if user_balance is not None else settings.default_user_balance,
                 kelly_multiplier=kelly_multiplier,
                 max_risk_cap=max_risk_cap,
                 yield_trigger_price=yield_trigger_price,

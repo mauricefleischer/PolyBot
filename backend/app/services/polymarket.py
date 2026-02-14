@@ -209,16 +209,44 @@ class GammaAPIClient:
         if cache_key in self._market_cache:
             return self._market_cache[cache_key]
         
-        result = await self._request(
+        # Use query param 'condition_ids' which returns a list
+        result = None
+        result_list = await self._request(
             "GET",
-            f"/markets/{condition_id}"
+            "/markets",
+            params={"condition_ids": condition_id}
         )
+        
+        if result_list and isinstance(result_list, list) and len(result_list) > 0:
+            result = result_list[0]
         
         if result:
             self._market_cache[cache_key] = result
+            
+            # Update in-memory mappings
+            condition_id = result.get("conditionId", result.get("condition_id", ""))
+            if condition_id:
+                self._market_names[condition_id] = result.get("question", "Unknown Market")
+                
+                # Extract correct slug
+                events = result.get("events", [])
+                if events and isinstance(events, list) and len(events) > 0:
+                    slug = events[0].get("slug")
+                    if not slug:
+                        slug = result.get("slug", "")
+                else:
+                    slug = result.get("slug", "")
+                
+                self._market_slugs[condition_id] = slug
+                
+                # Categorize
+                tags = result.get("tags", [])
+                if tags:
+                    self._market_categories[condition_id] = self._categorize_market(tags)
+                else:
+                    self._market_categories[condition_id] = "Other"
+            
             return result
-        
-        return None
     
     def get_market_name(self, condition_id: str) -> str:
         """Get cached market name."""
