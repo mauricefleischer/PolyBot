@@ -13,29 +13,35 @@ Every wallet is graded on 4 pillars, which are weighted to produce the final sco
 ### Pillar 1: ROI Performance (35% Weight)
 Measures raw profitability, but adjusted for luck.
 *   **Metric**: Modified Information Ratio.
-*   **Formula**: `Score = (Win_Rate * 1) + (ROI % * 0.5)`
-*   **Luck Filter**: If a wallet has < 40% Win Rate, their ROI score is capped at 50, even if they hit one massive jackpot. We want consistency, not lottery winners.
-*   **Bonus**: +10 points if `Total Profit > $50,000`.
+*   **Formula**: `Score = Min(100, (Win_Rate * 1) + (ROI % * 0.5))`
+*   **Luck Filter**: If `Win_Rate < 40%`, the score is limited. Even if a gambler hits a 100x winner, they don't get a perfect score if they lose 90% of their trades.
+*   **Bonus**: **+10 points** if `Total Profit > $50,000` (Proven Scalability).
 
 ### Pillar 2: Discipline (25% Weight)
 Measures the **Disposition Effect** (Odean, 1998) — the tendency of retail traders to sell winners too early (to lock in gains) and hold losers too long (hoping for a rebound).
 
-*   **Ratio**: `Average_Gain_Per_Win / Average_Loss_Per_Loss`.
+*   **Metric**: `Ratio = Avg_Hold_Time_Losers / Avg_Hold_Time_Winners`
 *   **Grading**:
-    *   **Ratio > 1.5**: **Score 100**. This trader lets winners run 1.5x further than their losers. Elite discipline.
-    *   **Ratio 1.0**: **Score 50**. Neutral.
-    *   **Ratio < 0.5**: **Score 0**. This trader "eats like a bird and poops like an elephant." They take 5% profits but hold 50% bags.
+    *   **Ratio $\le$ 0.5**: **Score 100**. This trader cuts losers 2x faster than winners. Elite discipline.
+    *   **Ratio $\approx$ 1.0**: **Score 50**. Neutral.
+    *   **Ratio $\ge$ 2.0**: **Score 0**. This trader is a "Bagholder" (holds losers 2x longer).
 
 ### Pillar 3: Precision (20% Weight)
-Measures the "Sharpshooter" quality.
-*   **Churn Penalty**: We penalize over-trading. -1 point for every 10 trades over 100 (in the sample window).
-*   **Concept**: A whale who makes 5 trades and wins 4 is infinitely more valuable to copy than an algorithmic bot that makes 1,000 trades to net the same profit. We want **clean signals**.
+Measures "Sniper" quality vs. "Spray and Pray".
+*   **Metric**: **Turnover Index** ($T$) = `Total_Trades / (Active_Positions + 1)`
+*   **Logic**:
+    *   **$T < 2.0$**: **Score 100** ("Sniper"). Few trades per position. High conviction.
+    *   **$T > 10.0$**: **Score 0** ("Churner"). Constantly flipping in and out.
+    *   *Exception*: If **ROI Score > 80**, this penalty is bypassed (Profitable HFT is allowed).
 
 ### Pillar 4: Timing (20% Weight)
-Measures simple alpha: Does this wallet move *before* the market moves?
-*   **Metric**: Average entry timestamp vs. Crowd entry timestamp.
-*   **Pioneer Bonus**: Entering >24h before the crowd average = **High Score**.
-*   **FOMO Penalty**: Entering during price spikes or <1h before resolution = **Low Score**.
+Measures Alpha: Does this wallet move *before* the price moves?
+*   **Proxy Metric**: **Price Percentile Entry**.
+    *   Since exact market start times are noisy, we use the entry price as a proxy for timing.
+*   **Grading**:
+    *   **Entry Price < 0.20**: **Score 100** ("Pioneer"). Buying at 10-20 cents implies contrarian early insight.
+    *   **Entry Price 0.30 - 0.70**: **Score 50** ("Crowd"). Buying when the outcome is uncertain but popular.
+    *   **Entry Price > 0.80**: **Score 0** ("FOMO/Exit Liquidity"). Buying at 90 cents is chasing.
 
 ---
 
@@ -54,11 +60,13 @@ Based on the final weighted score, whales are assigned a Tier Tag.
 
 ## 3. Performance Tags
 
-The system also assigns behavioral tags to help you understand *how* a whale trades:
+The system assigns behavioral tags based on specific sub-scores:
 
-*   **PROF**: Highly profitable (> 20% ROI).
-*   **PRC** (Precision): High win rate (> 65%).
-*   **HLD** (Diamond Hands): Average hold time > 7 days.
-*   **DUMP**: Fast dumper / Paper hands (Avg hold < 24h).
-*   **CHRN**: High churn (Over-trader).
-*   **PNIR** (Pioneer): Early entries.
+| Tag | Code | Requirement | Meaning |
+| :--- | :--- | :--- | :--- |
+| **Diamond Hands** | `HLD` | Discipline Score > 90 | Holds winners, cuts losers fast. |
+| **Paper Hands** | `DUMP` | Discipline Score < 20 | Panic sells or holds bags. |
+| **Sniper** | `PRC` | Precision Score > 90 | Very few trades, high conviction. |
+| **Churner** | `CHRN` | Precision Score < 20 | Over-trading / Indecisive. |
+| **Pioneer** | `PNIR` | Timing Score > 80 | Enters early (Low price). |
+| **Profitable** | `PROF` | ROI Score > 80 | Elite profitability. |

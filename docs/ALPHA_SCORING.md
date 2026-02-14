@@ -1,64 +1,111 @@
 # Alpha Score 2.0
 
-The **Alpha Score** (0-100) is the primary metric PolyBot uses to grade a market signal. Unlike the "Whale Score" (which rates a *user*), the Alpha Score rates a *specific position* (e.g., "YES on Trump").
+The **Alpha Score** (0-100) is the primary metric PolyBot uses to grade a market signal. It replaces the original volume-based scoring with a multi-factor model grounded in behavioral finance research.
 
-It answers the question: **"How strong is the smart money conviction on this specific outcome?"**
-
----
-
-## 1. The Formula
-
-The Alpha Score is a weighted sum of four components:
-
-$$ Alpha = Base + Quality + Freshness + SmartShort $$
-
-### Component 1: Base Conviction (Log-Volume)
-We look at the total USD volume wagered by tracked whales on this outcome.
-*   **Formula**: $10 \times \log_{10}(\text{Volume})$
-*   **Scale**:
-    *   $1,000 Volume → 30 points
-    *   $10,000 Volume → 40 points
-    *   $100,000 Volume → 50 points
-*   *Why Log Scale?* The difference between $1k and $10k matters more than $100k vs $110k.
-
-### Component 2: Quality Multiplier
-Volume is useless if it comes from bad traders ("dumb money"). We adjust the effective volume based on the **Trade-Weighted Average Whale Score** of the participants.
-
-*   **Formula**: $\text{Multiplier} = \frac{\text{AvgWhaleScore}}{50}$
-*   **Impact**:
-    *   **ELITE Whales (Score 90)**: Multiplier = 1.8x. Their $10k counts as $18k.
-    *   **WEAK Whales (Score 30)**: Multiplier = 0.6x. Their $10k counts as $6k.
-
-### Component 3: Freshness Decay
-Information has a half-life. A signal generated 2 weeks ago is "stale" because the market has likely already priced it in.
-
-*   **Decay Rate**: -0.5 points for every hour since the *last* whale entry.
-*   **Floor**: Max penalty is -20 points.
-*   **Actionable Window**: The score is highest immediately after a new whale enters.
-
-### Component 4: Smart Short Bonus
-This is a contrarian indicator. If we see whales taking a position against a massive retail "bagholder" crowd.
-
-*   **Condition**:
-    1.  Market Price < 0.10 (Retail thinks it's a "lottery ticket")
-    2.  Whales are betting "NO" (Selling) or holding "NO".
-    3.  Whale Volume > $5,000.
-*   **Bonus**: **+15 points**.
-*   *Why?* Betting against retail delusions is historically the most profitable strategy in prediction markets.
+It answers the question: **"Does this price movement have characteristics of smart money or retail noise?"**
 
 ---
 
-## 2. Score Interpretation
+## 1. The Master Formula
 
-| Alpha Score | Rating | Meaning | Action |
+The Alpha Score is a composite of a fixed base and 4 distinct sub-factors.
+
+$$ Alpha = \text{Clamp}(0, 100, \text{Base} + \text{FLB} + \text{Momentum} + \text{SmartShort} + \text{Freshness}) $$
+
+### Base Score
+*   **Value**: **50**
+*   The system assumes a "Neutral" state by default. Evidence adds to or subtracts from this midpoint.
+
+---
+
+## 2. The 4 Sub-Factors
+
+### Factor 1: Favorite-Longshot Bias (FLB) Score
+**Source**: Wolfers & Zitzewitz (2004).
+
+We adjust for the proven retail tendency to overpay for longshots (lottery tickets) and underpay for favorites (risk aversion). We divide the current price ($p$) into 4 zones:
+
+| Zone | Price Range | Score Impact | Behavior |
 | :--- | :--- | :--- | :--- |
-| **80 - 100** | **GOD MODE** | Massive volume from Elite whales + Fresh. | **Max Bet Size** |
-| **70 - 79** | **HIGH** | Strong consensus. | **Standard Size** |
-| **50 - 69** | **MEDIUM** | Good signal, but maybe stale or low volume. | **Half Size** |
-| **< 50** | **LOW** | Insufficient conviction or stale. | **Pass / Watch** |
+| **Lottery Zone** | $p < 0.05$ | **-40** | Massive retail overpricing. Buying here is negative EV. |
+| **Hope Zone** | $0.05 \le p < 0.15$ | **-20** | Moderate overpricing. |
+| **Confusion Zone** | $0.15 \le p \le 0.85$ | **0** | Efficiently priced. No edge from FLB. |
+| **Favorite Value** | $p > 0.85$ | **+15** | Underpriced. Whales buying here are capturing free value. |
+
+*Note: The negative penalties are scaled by the `longshot_tolerance` setting (default 1.0).*
+
+### Factor 2: Momentum (Anchoring)
+**Source**: Technical Analysis / Behavioral Anchoring.
+
+We compare the current price ($p$) to the **7-Day Moving Average** ($MA_{7d}$) fetched from the CLOB API.
+
+$$ Ratio = p / MA_{7d} $$
+
+| Ratio | Condition | Score Impact | Meaning |
+| :--- | :--- | :--- | :--- |
+| $> 1.05$ | Price > 5% above avg | **+10** | **Breakout**. Price is trending up with conviction. |
+| $< 0.95$ | Price > 5% below avg | **-10** | **Falling Knife**. Sentiment is collapsing. |
+| $0.95 - 1.05$ | Price roughly equal | **0** | Ranging / No momentum signal. |
+
+*Note: If price history is unavailable, this factor is 0.*
+
+### Factor 3: Smart Short
+**Source**: Contrarian Betting Strategy.
+
+Retail bettors suffer from **Desirability Bias** (betting on what they *want* to happen) and **Long Bias** (focusing on "YES" shares). Whales who bet "NO" are often exploiting this inefficiency.
+
+We award a bonus for **"NO"** bets (Shorts), weighted by the sector's retail density:
+
+| Sector | Direction | Score Impact | Rationale |
+| :--- | :--- | :--- | :--- |
+| **Politics** | NO | **+20** | Highest sentiment bias (e.g., "My candidate will win"). |
+| **Sports** | NO | **+20** | Fan loyalty bias. |
+| **Entertainment** | NO | **+15** | Pop culture bias. |
+| **Finance/Other** | NO | **+10** | More efficient, but still some long bias. |
+| **Any** | YES | **0** | No penalty, but no bonus. |
+
+### Factor 4: Freshness (Information Decay)
+**Source**: Efficient Market Hypothesis.
+
+Market information decays rapidly. A whale entering *right now* is valuable. A whale who entered 5 days ago has already been priced in.
+
+$$ Freshness = \max(0, 10 - 2 \times \text{DaysSinceEntry}) $$
+
+| Age | Score Impact | Label |
+| :--- | :--- | :--- |
+| < 24 Hours | **+10** | Fresh Signal |
+| 1 Day | **+8** | Recent |
+| 2 Days | **+6** | Recent |
+| 3 Days | **+4** | Aging |
+| > 5 Days | **0** | Stale (No Value) |
 
 ---
 
-## 3. Consensus Strength
+## 3. Score Interpretation
 
-The Alpha Score is calculated entirely in `aggregator.py`. It is re-calculated every time the bot polls for new positions (default: 30s). This means the score is dynamic—it will rise if a new whale enters, and fall slowly over time as the "Freshness" decays.
+| Total Score | Rating | Action |
+| :--- | :--- | :--- |
+| **70 - 100** | **ALPHA** | **Prioritize**. Strong confluence of logic, value, and timing. |
+| **40 - 69** | **NEUTRAL** | **Verify**. Likely a standard trade or conflicting signals. |
+| **0 - 39** | **LOTTERY** | **Ignore/Filter**. High risk, likely retail bait or falling knife. |
+
+---
+
+## 4. Example Calculation
+
+**Scenario**: "Will Trump win?" (Politics)
+*   Current Price: **$0.92**
+*   7d Avg Price: **$0.85**
+*   Whale Activity: Selling "NO" (which is buying YES) - *Wait, simple YES bet.*
+*   Timing: Entered 12 hours ago.
+
+**Calculation**:
+1.  **Base**: 50
+2.  **FLB**: Price $0.92 > 0.85$ (Favorite Value) → **+15**
+3.  **Momentum**: $0.92 / 0.85 = 1.08$ (> 1.05) → **+10** (Breakout)
+4.  **Smart Short**: Betting YES → **0**
+5.  **Freshness**: 0.5 days old → **+10**
+
+**Total Alpha Score**: $50 + 15 + 10 + 0 + 10 = \mathbf{85}$ (**GOD MODE**)
+
+This signal would trigger a **+5% Alpha Boost** in the Risk Engine's probability estimation.
