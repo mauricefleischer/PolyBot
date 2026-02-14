@@ -83,9 +83,10 @@ DEFAULT_RISK_CAP=0.05
 
 ### The Terminal
 *   **Signal Table**: Shows live aggregated positions. Sort by **Alpha Score** to find the best trades.
-*   **Consensus Bar**: Visualizes the crowd size.
-    *   🟪 **Purple**: One or more **ELITE** whales are in this trade.
-    *   **Scale**: Larger bar = More wallets.
+*   **Consensus Indicators**:
+    *   🟪 **Purple**: Elite Whale Involvement (High Conviction).
+    *   🟩 **Green**: High Consensus (4+ Wallets).
+    *   🟨 **Amber**: Moderate Consensus (2-3 Wallets).
 
 ### Whale Manager
 *   Add/Remove wallets to track.
