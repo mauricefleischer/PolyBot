@@ -21,6 +21,7 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
     yieldTriggerPrice: 0.85,
     yieldFixedPct: 0.10,
     yieldMinWhales: 3,
+    consensusPurpleThreshold: 4,
 };
 
 interface ServerSettings {
@@ -38,6 +39,7 @@ interface ServerSettings {
     yield_trigger_price: number;
     yield_fixed_pct: number;
     yield_min_whales: number;
+    consensus_purple_threshold: number;
 }
 
 // Convert server format to frontend format
@@ -57,6 +59,7 @@ function fromServer(server: ServerSettings): RiskSettings {
         yieldTriggerPrice: server.yield_trigger_price ?? 0.85,
         yieldFixedPct: server.yield_fixed_pct ?? 0.10,
         yieldMinWhales: server.yield_min_whales ?? 3,
+        consensusPurpleThreshold: server.consensus_purple_threshold ?? 4,
     };
 }
 
@@ -77,6 +80,7 @@ function toServer(settings: Partial<RiskSettings>): Partial<ServerSettings> {
     if (settings.yieldTriggerPrice !== undefined) result.yield_trigger_price = settings.yieldTriggerPrice;
     if (settings.yieldFixedPct !== undefined) result.yield_fixed_pct = settings.yieldFixedPct;
     if (settings.yieldMinWhales !== undefined) result.yield_min_whales = settings.yieldMinWhales;
+    if (settings.consensusPurpleThreshold !== undefined) result.consensus_purple_threshold = settings.consensusPurpleThreshold;
     return result;
 }
 

@@ -55,9 +55,11 @@ export function truncate(text: string, maxLength: number): string {
 /**
  * Get heatmap class based on wallet count
  */
-export function getHeatmapClass(walletCount: number): string {
-    if (walletCount >= 4) return 'heatmap-high';
-    if (walletCount >= 2) return 'heatmap-medium';
+export function getHeatmapClass(
+    walletCount: number,
+    minWallets: number = 2
+): string {
+    if (walletCount >= minWallets) return 'heatmap-medium';
     return '';
 }
 

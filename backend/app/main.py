@@ -216,6 +216,7 @@ class SettingsRequest(BaseModel):
     yield_trigger_price: Optional[float] = None
     yield_fixed_pct: Optional[float] = None
     yield_min_whales: Optional[int] = None
+    consensus_purple_threshold: Optional[int] = None
 
 
 class SettingsResponse(BaseModel):
@@ -230,6 +231,7 @@ class SettingsResponse(BaseModel):
     yield_trigger_price: float = 0.85
     yield_fixed_pct: float = 0.10
     yield_min_whales: int = 3
+    consensus_purple_threshold: int = 4
 
 
 @app.get("/api/v1/settings", response_model=SettingsResponse)
@@ -249,6 +251,7 @@ async def get_settings():
         yield_trigger_price=getattr(settings_data, "yield_trigger_price", 0.85),
         yield_fixed_pct=getattr(settings_data, "yield_fixed_pct", 0.10),
         yield_min_whales=getattr(settings_data, "yield_min_whales", 3),
+        consensus_purple_threshold=getattr(settings_data, "consensus_purple_threshold", 4),
     )
 
 
@@ -268,6 +271,7 @@ async def update_settings(request: SettingsRequest):
         yield_trigger_price=request.yield_trigger_price,
         yield_fixed_pct=request.yield_fixed_pct,
         yield_min_whales=request.yield_min_whales,
+        consensus_purple_threshold=request.consensus_purple_threshold,
     )
     
     return SettingsResponse(
@@ -281,6 +285,7 @@ async def update_settings(request: SettingsRequest):
         yield_trigger_price=getattr(updated, "yield_trigger_price", 0.85),
         yield_fixed_pct=getattr(updated, "yield_fixed_pct", 0.10),
         yield_min_whales=getattr(updated, "yield_min_whales", 3),
+        consensus_purple_threshold=getattr(updated, "consensus_purple_threshold", 4),
     )
 
 

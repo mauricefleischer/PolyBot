@@ -7,7 +7,7 @@ import {
     type ColumnDef,
 } from '@tanstack/react-table';
 import { ArrowUpDown, HelpCircle } from 'lucide-react';
-import type { Signal } from '../../types/api';
+import type { Signal, RiskSettings } from '../../types/api';
 import { Tooltip, AlphaTooltipContent, KellyTooltipContent, WhaleTooltipContent, AlphaGuideTooltip } from '../ui/Tooltip';
 import {
     cn,
@@ -22,9 +22,10 @@ import {
 interface SignalTableProps {
     signals: Signal[];
     isLoading?: boolean;
+    settings?: RiskSettings;
 }
 
-export function SignalTable({ signals, isLoading }: SignalTableProps) {
+export function SignalTable({ signals, isLoading, settings }: SignalTableProps) {
     const columns = useMemo<ColumnDef<Signal>[]>(
         () => [
             // Column 1: RANK & CONSENSUS
@@ -44,9 +45,12 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
                     const consensus = row.original.consensus;
                     const walletCount = consensus.count;
 
-                    // Use standard heatmap, but override with purple if Elite consensus is present
-                    const baseHeatmapClass = getHeatmapClass(walletCount);
-                    const barClass = consensus.has_elite
+                    // Use standard heatmap (Orange), but override with purple if Elite consensus is present OR threshold met
+                    const isPurple = consensus.has_elite || (settings?.consensusPurpleThreshold && walletCount >= settings.consensusPurpleThreshold);
+
+                    const baseHeatmapClass = getHeatmapClass(walletCount, 1); // Always returns medium (Orange)
+
+                    const barClass = isPurple
                         ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]'
                         : baseHeatmapClass;
 
@@ -244,7 +248,7 @@ export function SignalTable({ signals, isLoading }: SignalTableProps) {
                 },
             },
         ],
-        []
+        [settings]
     );
 
     const table = useReactTable({

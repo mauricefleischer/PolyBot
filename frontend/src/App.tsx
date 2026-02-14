@@ -127,7 +127,7 @@ function TerminalApp() {
                 Showing {signals.length} signals from {walletCount} tracked wallets
               </p>
             </div>
-            <SignalTable signals={signals} isLoading={signalsLoading} />
+            <SignalTable signals={signals} isLoading={signalsLoading} settings={riskSettings} />
           </div>
         )}
 

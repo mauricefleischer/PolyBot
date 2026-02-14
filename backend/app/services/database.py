@@ -35,6 +35,9 @@ class UserSettings:
     yield_trigger_price: float = 0.85
     yield_fixed_pct: float = 0.10
     yield_min_whales: int = 3
+    # Consensus Thresholds
+    # Consensus Thresholds
+    consensus_purple_threshold: int = 4
 
 
 class DatabaseService:
@@ -125,6 +128,8 @@ class DatabaseService:
                 "ALTER TABLE user_settings ADD COLUMN yield_trigger_price REAL DEFAULT 0.85",
                 "ALTER TABLE user_settings ADD COLUMN yield_fixed_pct REAL DEFAULT 0.10",
                 "ALTER TABLE user_settings ADD COLUMN yield_min_whales INTEGER DEFAULT 3",
+                "ALTER TABLE user_settings ADD COLUMN yield_min_whales INTEGER DEFAULT 3",
+                "ALTER TABLE user_settings ADD COLUMN consensus_purple_threshold INTEGER DEFAULT 4",
             ]:
                 try:
                     cursor.execute(col_sql)
@@ -248,6 +253,7 @@ class DatabaseService:
                     yield_trigger_price=row["yield_trigger_price"] if "yield_trigger_price" in row.keys() else 0.85,
                     yield_fixed_pct=row["yield_fixed_pct"] if "yield_fixed_pct" in row.keys() else 0.10,
                     yield_min_whales=row["yield_min_whales"] if "yield_min_whales" in row.keys() else 3,
+                    consensus_purple_threshold=row["consensus_purple_threshold"] if "consensus_purple_threshold" in row.keys() else 4,
                 )
             
             return UserSettings(user_id=user_id)
@@ -265,6 +271,7 @@ class DatabaseService:
         yield_trigger_price: Optional[float] = None,
         yield_fixed_pct: Optional[float] = None,
         yield_min_whales: Optional[int] = None,
+        consensus_purple_threshold: Optional[int] = None,
     ) -> UserSettings:
         """Update user settings."""
         current = self.get_settings(user_id)
@@ -276,8 +283,9 @@ class DatabaseService:
                 (user_id, kelly_multiplier, max_risk_cap, min_wallets, hide_lottery, 
                  connected_wallet, longshot_tolerance, trend_mode,
                  yield_trigger_price, yield_fixed_pct, yield_min_whales,
+                 consensus_purple_threshold,
                  updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """, (
                 user_id,
                 kelly_multiplier if kelly_multiplier is not None else current.kelly_multiplier,
@@ -290,6 +298,7 @@ class DatabaseService:
                 yield_trigger_price if yield_trigger_price is not None else current.yield_trigger_price,
                 yield_fixed_pct if yield_fixed_pct is not None else current.yield_fixed_pct,
                 yield_min_whales if yield_min_whales is not None else current.yield_min_whales,
+                consensus_purple_threshold if consensus_purple_threshold is not None else current.consensus_purple_threshold,
             ))
         
         return self.get_settings(user_id)

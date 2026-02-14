@@ -91,6 +91,7 @@ export interface RiskSettings {
     yieldTriggerPrice: number;
     yieldFixedPct: number;
     yieldMinWhales: number;
+    consensusPurpleThreshold: number;
 }
 
 export interface PortfolioPosition {

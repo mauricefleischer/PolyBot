@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Wallet, Sliders, Check, AlertCircle } from 'lucide-react';
+import { Wallet, Sliders, Check, AlertCircle, Eye, Monitor } from 'lucide-react';
 
 import type { RiskSettings } from '../../types/api';
 
@@ -69,13 +69,13 @@ export function SettingsTab({
         saveSettings(newSettings); // Debounced API call
     };
 
-    // Helper to safely access settings with connection fallback 
+    // Helper to safely access settings with connection fallback
     // (using localSettings for UI consistency during edits)
     const settings = localSettings;
 
     return (
         <div className="space-y-8">
-            {/* Risk Configuration */}
+            {/* 1. Risk Configuration */}
             <section className="bg-white rounded-lg border border-slate-200">
                 <div className="p-6 border-b border-slate-200">
                     <h3 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
@@ -83,7 +83,7 @@ export function SettingsTab({
                         Risk Configuration
                     </h3>
                     <p className="text-sm text-slate-500">
-                        Adjust Kelly Criterion parameters and view filters.
+                        Adjust Kelly Criterion parameters and sizing logic.
                     </p>
                 </div>
 
@@ -202,7 +202,7 @@ export function SettingsTab({
                     {/* Minimum Wallets */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Minimum Whale Consensus
+                            Global Minimum Whales
                         </label>
                         <input
                             type="number"
@@ -214,29 +214,11 @@ export function SettingsTab({
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 font-mono"
                         />
                         <p className="mt-1 text-xs text-slate-500">
-                            Hide signals below this threshold
+                            Signals with fewer whales are hidden completely.
                         </p>
                     </div>
 
-                    {/* Hide Lottery */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            View Filters
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={settings.hideLottery}
-                                onChange={(e) => updateRiskSetting('hideLottery', e.target.checked)}
-                                className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
-                            />
-                            <span className="text-sm text-slate-700">
-                                Hide Lottery Tickets (Alpha &lt; 30)
-                            </span>
-                        </label>
-                    </div>
-
-                    {/* Longshot Tolerance (Alpha 2.0) */}
+                    {/* Longshot Tolerance */}
                     <div>
                         <label className="block text-sm font-medium text-slate-700 mb-2">
                             Longshot Tolerance: {(settings.longshotTolerance ?? 1.0).toFixed(1)}x
@@ -256,89 +238,162 @@ export function SettingsTab({
                             <span>Strict (1.5x)</span>
                         </div>
                         <p className="mt-1 text-xs text-slate-500">
-                            Scales how much longshot bets are penalized by the FLB model
-                        </p>
-                    </div>
-
-                    {/* Trend Following Mode (Alpha 2.0) */}
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">
-                            Alpha Score 2.0
-                        </label>
-                        <label className="flex items-center gap-3 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={settings.trendMode ?? true}
-                                onChange={(e) => updateRiskSetting('trendMode', e.target.checked)}
-                                className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
-                            />
-                            <span className="text-sm text-slate-700">
-                                Trend Following Mode
-                            </span>
-                        </label>
-                        <p className="mt-1 text-xs text-slate-500">
-                            Enable momentum scoring (price vs 7-day average)
+                            Scales how much longshot bets are penalized by the FLB model.
                         </p>
                     </div>
                 </div>
             </section>
 
+            {/* 2. Visual Interface Settings */}
+            <section className="bg-white rounded-lg border border-slate-200">
+                <div className="p-6 border-b border-slate-200">
+                    <h3 className="text-lg font-bold text-slate-900 mb-1 flex items-center gap-2">
+                        <Monitor className="w-5 h-5" />
+                        Interface Settings
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                        Customize visual indicators, color thresholds, and view filters.
+                    </p>
+                </div>
 
+                <div className="p-6 space-y-8">
+                    {/* Perspective: Consensus Thresholds */}
+                    <div>
+                        <h4 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                            <Eye className="w-4 h-4" />
+                            Consensus Visualization
+                        </h4>
 
-            {/* User Wallet Connection */}
-            < section className="bg-slate-50 rounded-lg p-6 border border-slate-200" >
+                        <div className="space-y-6">
+                            {/* Purple Threshold Override */}
+                            <div>
+                                <div className="flex justify-between text-sm mb-2">
+                                    <span className="font-medium text-slate-700 flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                                        Elite Consensus Threshold
+                                    </span>
+                                    <span className="font-mono font-bold text-slate-900">
+                                        {settings.consensusPurpleThreshold ?? 4} Whales
+                                    </span>
+                                </div>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    step={1}
+                                    value={settings.consensusPurpleThreshold ?? 4}
+                                    onChange={(e) => updateRiskSetting('consensusPurpleThreshold', parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono"
+                                />
+                                <p className="mt-1 text-xs text-slate-500">
+                                    Minimum distinct wallets required to trigger the Elite (Purple) status.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+                        {/* Hide Lottery */}
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Low Quality Filtering
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={settings.hideLottery}
+                                    onChange={(e) => updateRiskSetting('hideLottery', e.target.checked)}
+                                    className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium text-slate-900 block">
+                                        Hide Lottery Tickets
+                                    </span>
+                                    <span className="text-xs text-slate-500 block">
+                                        Exclude signals with Alpha Score &lt; 30
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+
+                        {/* Trend Following Mode */}
+                        <div>
+                            <label className="block text-sm font-bold text-slate-700 mb-2">
+                                Scoring Logic
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={settings.trendMode ?? true}
+                                    onChange={(e) => updateRiskSetting('trendMode', e.target.checked)}
+                                    className="w-5 h-5 rounded border-slate-300 text-slate-900 focus:ring-slate-500"
+                                />
+                                <div>
+                                    <span className="text-sm font-medium text-slate-900 block">
+                                        Trend Following Mode
+                                    </span>
+                                    <span className="text-xs text-slate-500 block">
+                                        Enable momentum scoring (price vs 7d avg)
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 3. User Wallet Connection */}
+            <section className="bg-slate-50 rounded-lg p-6 border border-slate-200">
                 <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                     <Wallet className="w-5 h-5" />
                     Your Wallet
                 </h3>
 
-                {
-                    userWallet ? (
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-500">Connected as:</p>
-                                <p className="font-mono text-slate-900">{userWallet}</p>
-                            </div>
-                            <button
-                                onClick={onDisconnectWallet}
-                                className="btn-danger text-sm py-2 px-4"
-                            >
-                                Disconnect
+                {userWallet ? (
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-slate-500">Connected as:</p>
+                            <p className="font-mono text-slate-900">{userWallet}</p>
+                        </div>
+                        <button
+                            onClick={onDisconnectWallet}
+                            className="btn-danger text-sm py-2 px-4"
+                        >
+                            Disconnect
+                        </button>
+                    </div>
+                ) : (
+                    <form onSubmit={handleConnectWallet} className="space-y-4">
+                        <p className="text-sm text-slate-500">
+                            Connect your wallet to compare your positions against whale consensus.
+                        </p>
+                        <div className="flex gap-3">
+                            <input
+                                type="text"
+                                value={connectAddress}
+                                onChange={(e) => setConnectAddress(e.target.value)}
+                                placeholder="0x..."
+                                className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
+                            />
+                            <button type="submit" className="btn-primary">
+                                Connect
                             </button>
                         </div>
-                    ) : (
-                        <form onSubmit={handleConnectWallet} className="space-y-4">
-                            <p className="text-sm text-slate-500">
-                                Connect your wallet to compare your positions against whale consensus.
-                            </p>
-                            <div className="flex gap-3">
-                                <input
-                                    type="text"
-                                    value={connectAddress}
-                                    onChange={(e) => setConnectAddress(e.target.value)}
-                                    placeholder="0x..."
-                                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg font-mono text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                                />
-                                <button type="submit" className="btn-primary">
-                                    Connect
-                                </button>
+                        {error && (
+                            <div className="flex items-center gap-2 text-rose-600 text-sm">
+                                <AlertCircle className="w-4 h-4" />
+                                {error}
                             </div>
-                            {error && (
-                                <div className="flex items-center gap-2 text-rose-600 text-sm">
-                                    <AlertCircle className="w-4 h-4" />
-                                    {error}
-                                </div>
-                            )}
-                            {success && (
-                                <div className="flex items-center gap-2 text-emerald-600 text-sm">
-                                    <Check className="w-4 h-4" />
-                                    {success}
-                                </div>
-                            )}
-                        </form>
-                    )
-                }
-            </section >
-        </div >
+                        )}
+                        {success && (
+                            <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                                <Check className="w-4 h-4" />
+                                {success}
+                            </div>
+                        )}
+                    </form>
+                )}
+            </section>
+        </div>
     );
 }

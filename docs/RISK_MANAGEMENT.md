@@ -30,7 +30,7 @@ Every time a signal is generated, the Risk Engine runs it through this decision 
 
 ### Step 1: Mode Selection
 Is this a "Yield Play" (Safe Parking)?
-*   **Trigger**: Price $\ge$ 0.85 (85¢) AND at least 3 separate whales occupy the position.
+*   **Trigger**: Price $\ge$ `YieldTriggerPrice` (Default 0.85) AND at least `YieldMinWhales` (Default 3) separate whales occupy the position.
 *   **Logic**: High-priced positions backed by multiple smart whales are often mispriced arbitrage opportunities or nearly resolved events.
 *   **Action**: **YIELD MODE** (See Section 4).
 *   **Else**: **SPECULATION MODE** (Proceed to Step 2).
@@ -107,8 +107,9 @@ Yield Mode overrides Kelly for high-probability "yield farming" bets.
 *   **Sizing**: Fixed percentage allocation.
 *   **Formula**:
     $$ \text{Size} = \min(\text{YieldFixedPct}, \text{MaxConcentration}) $$
-*   **Defaults**:
+*   **Defaults** (User Configurable):
     *   `YieldFixedPct`: 10%
     *   `MaxConcentration`: 20%
+    *   `YieldMinWhales`: 3
 
 *Why?* Kelly is too volatile for 90% probability bets (it would suggest betting 50%+ of bankroll). Yield Mode keeps size consistent and safe.

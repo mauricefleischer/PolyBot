@@ -84,9 +84,8 @@ DEFAULT_RISK_CAP=0.05
 ### The Terminal
 *   **Signal Table**: Shows live aggregated positions. Sort by **Alpha Score** to find the best trades.
 *   **Consensus Indicators**:
-    *   🟪 **Purple**: Elite Whale Involvement (High Conviction).
-    *   🟩 **Green**: High Consensus (4+ Wallets).
-    *   🟨 **Amber**: Moderate Consensus (2-3 Wallets).
+    *   🟪 **Purple**: Elite Consensus. Triggered if **Elite Whales** are involved OR if total consensus meets the configured **Elite Threshold**.
+    *   🟧 **Orange**: Standard Consensus. Valid signals that haven't reached the Elite threshold.
 
 ### Whale Manager
 *   Add/Remove wallets to track.
@@ -94,7 +93,8 @@ DEFAULT_RISK_CAP=0.05
 
 ### Settings
 *   **Kelly Multiplier**: Adjust aggression (0.1 = Safe, 1.0 = Degen).
-*   **Yield Mode**: Configure trigger price (default 0.85) for safe parking.
+*   **Yield Mode**: Configure trigger price (default 0.85), fixed position size, and minimum whale count.
+*   **Visuals**: Set your custom **Elite Consensus Threshold** (e.g., show Purple bar only if >5 whales).
 
 ---
 

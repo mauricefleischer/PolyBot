@@ -18,6 +18,8 @@ class ScoringConfig:
     yield_trigger_price: float = 0.85 # Price above which "Yield Mode" activates
     yield_fixed_pct: float = 0.10     # Fixed portfolio % for Yield Mode trades
     yield_min_whales: int = 3         # Min whales required for Yield Mode
+    yield_min_whales: int = 3         # Min whales required for Yield Mode
+    consensus_purple_threshold: int = 4 # Min wallets for Purple (Elite) status
 
 
 @dataclass
