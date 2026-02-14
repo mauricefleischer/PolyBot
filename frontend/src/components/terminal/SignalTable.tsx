@@ -45,8 +45,8 @@ export function SignalTable({ signals, isLoading, settings }: SignalTableProps) 
                     const consensus = row.original.consensus;
                     const walletCount = consensus.count;
 
-                    // Use standard heatmap (Orange), but override with purple if Elite consensus is present OR threshold met
-                    const isPurple = consensus.has_elite || (settings?.consensusPurpleThreshold && walletCount >= settings.consensusPurpleThreshold);
+                    // Elite status (Purple) is ONLY triggered by the actual count of elite wallets matching the threshold
+                    const isPurple = (consensus as any).elite_count >= (settings?.consensusPurpleThreshold ?? 1);
 
                     const baseHeatmapClass = getHeatmapClass(walletCount, 1); // Always returns medium (Orange)
 
@@ -72,10 +72,7 @@ export function SignalTable({ signals, isLoading, settings }: SignalTableProps) 
                         >
                             <div className="relative pl-3 cursor-help">
                                 <div className={cn('heatmap-bar', barClass)} />
-                                <div className={cn(
-                                    "text-xl tabular-nums flex items-center gap-1.5 font-bold",
-                                    consensus.has_elite ? "text-purple-400" : "text-slate-900"
-                                )}>
+                                <div className="text-xl tabular-nums flex items-center gap-1.5 font-bold text-slate-900">
                                     {walletCount}
                                 </div>
                                 <div className="text-slate-500 text-xs">Wallets</div>

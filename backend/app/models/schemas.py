@@ -76,6 +76,7 @@ class ConsensusContributor(BaseModel):
 class SignalConsensus(BaseModel):
     """Structured consensus data for the signal."""
     count: int = Field(ge=0)
+    elite_count: int = Field(default=0, ge=0)
     has_elite: bool = False
     weighted_score: int = 0
     contributors: List[ConsensusContributor] = []

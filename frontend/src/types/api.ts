@@ -75,6 +75,7 @@ export interface ConsensusContributor {
 
 export interface SignalConsensus {
     count: number;
+    elite_count: number;
     has_elite: boolean;
     weighted_score: number;
     contributors: ConsensusContributor[];

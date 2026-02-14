@@ -711,6 +711,7 @@ class ConsensusEngine:
 
             consensus_data = SignalConsensus(
                 count=agg.wallet_count,
+                elite_count=sum(1 for w in agg.wallet_addresses if whale_scores_map.get(w.lower(), {}).get("tier") == "ELITE"),
                 has_elite=has_elite,
                 weighted_score=avg_whale_score,
                 contributors=consensus_contributors
