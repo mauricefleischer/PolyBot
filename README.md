@@ -18,17 +18,17 @@ We don't just follow big money; we grade it. Every tracked wallet is rated **0�
 👉 **[Deep Dive: Whale Ranking Logic](docs/WHALE_RANKING.md)**
 
 ### 2. Alpha Score 2.0
-Not all volume is equal. We score every market signal (0-100) using a multi-factor model:
-*   **Smart Money**: Weighted by Whale Score (Elite > Weak).
+We score every market signal (0-100) using a multi-factor model grounded in behavioral finance:
+*   **FLB**: Adjusts for retail "Lottery Ticket" bias (Wolfers 2004).
+*   **Momentum**: Detects breakouts vs. 7-day moving average.
+*   **Smart Short**: Bonus for betting against popular sentiment (e.g. Politics/Sports).
 *   **Freshness**: Time-decay (New signals > Old signals).
-*   **FLB**: Adjusts for retail "Lottery Ticket" bias.
-*   **Contrarian**: Bonus for betting against popular sentiment.
 
 👉 **[Deep Dive: Alpha Scoring Math](docs/ALPHA_SCORING.md)**
 
 ### 3. Dynamic Risk Engine
 We use a **De-Biased Fractional Kelly Criterion** to determine bet size.
-*   **Speculation Mode**: Calibrates probability based on market microstructure research (Wolfers 2004).
+*   **Speculation Mode**: Calibrates probability and dampens size based on **Whale Consensus Quality**.
 *   **Yield Mode**: Automatically switches to fixed-income style sizing for high-probability arbitrage (>85% odds).
 
 👉 **[Deep Dive: Risk Management & Kelly](docs/RISK_MANAGEMENT.md)**
@@ -83,9 +83,9 @@ DEFAULT_RISK_CAP=0.05
 
 ### The Terminal
 *   **Signal Table**: Shows live aggregated positions. Sort by **Alpha Score** to find the best trades.
-*   **Consensus Bar**: Visualizes the weighted whale opinion.
-    *   🟪 **Purple**: Elite Consensus (Follow).
-    *   🟥 **Red**: Weak/Retail Consensus (Fade).
+*   **Consensus Bar**: Visualizes the crowd size.
+    *   🟪 **Purple**: One or more **ELITE** whales are in this trade.
+    *   **Scale**: Larger bar = More wallets.
 
 ### Whale Manager
 *   Add/Remove wallets to track.
